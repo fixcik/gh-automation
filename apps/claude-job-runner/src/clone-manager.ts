@@ -1,5 +1,5 @@
 import { access, cp, mkdir, rm } from 'node:fs/promises';
-import { join } from 'node:path';
+import { dirname, join, resolve, sep } from 'node:path';
 import type { Logger } from '@gh-automation/logger';
 import type { ClaudeJobRequest } from '@gh-automation/shared-types';
 import { execa } from 'execa';
@@ -78,18 +78,33 @@ export class CloneManager {
   }
 
   /**
+   * Resolves a relative path against a base directory and validates it stays within bounds.
+   * Returns null if the path attempts to escape the base directory (path traversal).
+   */
+  private resolveSubPath(baseDir: string, relativePath: string): string | null {
+    const base = resolve(baseDir);
+    const resolved = resolve(baseDir, relativePath);
+    if (resolved === base || resolved.startsWith(base + sep)) return resolved;
+    return null;
+  }
+
+  /**
    * Restores cached paths from cache directory into the clone.
    */
   async restoreCache(clonePath: string, aggregateId: string, cachePaths: string[]): Promise<void> {
     const cacheSrcDir = this.getCachePath(aggregateId);
 
     for (const relativePath of cachePaths) {
-      const src = join(cacheSrcDir, relativePath);
-      const dest = join(clonePath, relativePath);
+      const src = this.resolveSubPath(cacheSrcDir, relativePath);
+      const dest = this.resolveSubPath(clonePath, relativePath);
+      if (!src || !dest) {
+        this.logger.warn({ relativePath }, 'Invalid cache path, skipping');
+        continue;
+      }
 
       try {
         await access(src);
-        await mkdir(join(dest, '..'), { recursive: true });
+        await mkdir(dirname(dest), { recursive: true });
         await cp(src, dest, { recursive: true });
         this.logger.debug({ src, dest }, 'Cache restored');
       } catch {
@@ -105,12 +120,16 @@ export class CloneManager {
     const cacheDestDir = this.getCachePath(aggregateId);
 
     for (const relativePath of cachePaths) {
-      const src = join(clonePath, relativePath);
-      const dest = join(cacheDestDir, relativePath);
+      const src = this.resolveSubPath(clonePath, relativePath);
+      const dest = this.resolveSubPath(cacheDestDir, relativePath);
+      if (!src || !dest) {
+        this.logger.warn({ relativePath }, 'Invalid cache path, skipping');
+        continue;
+      }
 
       try {
         await access(src);
-        await mkdir(join(dest, '..'), { recursive: true });
+        await mkdir(dirname(dest), { recursive: true });
         await cp(src, dest, { recursive: true });
         this.logger.debug({ src, dest }, 'Cache saved');
       } catch {

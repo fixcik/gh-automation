@@ -31,6 +31,10 @@ export class JobExecutor {
     this.natsUrl = deps.natsUrl;
   }
 
+  private getAggregateId(metadata: ClaudeJobRequest['metadata']): string {
+    return `${metadata.repository}:${metadata.prNumber}`;
+  }
+
   /**
    * Executes a complete job pipeline:
    * 1. Clone repo
@@ -52,8 +56,8 @@ export class JobExecutor {
 
       // 2. Restore cache
       if (request.cache?.paths?.length) {
-        const aggregateId = `${request.metadata.repository}:${request.metadata.prNumber}`;
-        await this.cloneManager.restoreCache(clonePath, String(aggregateId), request.cache.paths);
+        const aggregateId = this.getAggregateId(request.metadata);
+        await this.cloneManager.restoreCache(clonePath, aggregateId, request.cache.paths);
       }
 
       // 3. Build config
@@ -77,8 +81,8 @@ export class JobExecutor {
 
       // 5. Save cache
       if (request.cache?.paths?.length && clonePath) {
-        const aggregateId = `${request.metadata.repository}:${request.metadata.prNumber}`;
-        await this.cloneManager.saveCache(clonePath, String(aggregateId), request.cache.paths);
+        const aggregateId = this.getAggregateId(request.metadata);
+        await this.cloneManager.saveCache(clonePath, aggregateId, request.cache.paths);
       }
 
       // 6. Build result
@@ -89,7 +93,8 @@ export class JobExecutor {
 
       return result;
     } catch (error) {
-      const errorResult = this.buildErrorResult(request, error as Error, startedAt, startTime);
+      const err = error instanceof Error ? error : new Error(String(error));
+      const errorResult = this.buildErrorResult(request, err, startedAt, startTime);
 
       await this.publishResult(request, errorResult);
 

@@ -47,7 +47,7 @@ export class ClaudeRunner {
       };
     } catch (error) {
       // Timeout or other system error (not Claude exit code)
-      if (error instanceof Error && error.message.includes('timed out')) {
+      if (error instanceof Error && 'timedOut' in error && (error as any).timedOut === true) {
         this.logger.error({ timeoutMs }, 'Claude CLI timed out');
         return {
           exitCode: -1,

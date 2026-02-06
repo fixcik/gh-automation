@@ -78,9 +78,14 @@ process.on('SIGINT', () => shutdown('SIGINT'));
 initialize()
   .then(async ({ consumer, executor }) => {
     logger.info('Claude Job Runner started successfully');
-    await consumer.listen(async (request) => {
-      await executor.execute(request);
-    });
+    try {
+      await consumer.listen(async (request) => {
+        await executor.execute(request);
+      });
+    } catch (error) {
+      logger.error({ error }, 'Consumer loop failed');
+      await shutdown('error');
+    }
   })
   .catch((error) => {
     logger.error({ error }, 'Fatal error during initialization');
