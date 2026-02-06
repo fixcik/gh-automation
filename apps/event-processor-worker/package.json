@@ -1,0 +1,24 @@
+{
+  "name": "@gh-automation/event-processor-worker",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@gh-automation/database": "workspace:*",
+    "@gh-automation/shared-types": "workspace:*",
+    "@gh-automation/logger": "workspace:*"
+  },
+  "devDependencies": {
+    "@gh-automation/typescript-config": "workspace:*",
+    "@types/node": "^20.11.19",
+    "tsx": "^4.7.1",
+    "typescript": "^5.3.3"
+  }
+}

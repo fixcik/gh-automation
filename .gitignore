@@ -1,0 +1,39 @@
+# Dependencies
+node_modules
+.pnp
+.pnp.js
+
+# Testing
+coverage
+
+# Production
+dist
+build
+
+# Environment
+.env
+.env.local
+.env.production
+
+# Logs
+logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# OS
+.DS_Store
+*.swp
+*.swo
+
+# Turborepo
+.turbo
+
+# Database
+*.db
+*.sqlite
+
+# IDE
+.vscode
+.idea
+*.iml
