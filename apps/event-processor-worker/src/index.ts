@@ -4,11 +4,28 @@ import { OutboxProcessor } from './outbox-processor.js';
 
 const logger = createLogger('event-processor-worker', '0.0.1');
 
+const parsePositiveInt = (
+  value: string | undefined,
+  fallback: number,
+  name: string
+) => {
+  const parsed = Number.parseInt(value ?? '', 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    logger.warn({ value }, `Invalid ${name}; using default ${fallback}`);
+    return fallback;
+  }
+  return parsed;
+};
+
 // Configuration from environment
 const config = {
-  batchSize: parseInt(process.env.BATCH_SIZE || '100', 10),
-  maxRetries: parseInt(process.env.MAX_RETRIES || '5', 10),
-  processingIntervalMs: parseInt(process.env.PROCESSOR_INTERVAL_MS || '1000', 10),
+  batchSize: parsePositiveInt(process.env.BATCH_SIZE, 100, 'BATCH_SIZE'),
+  maxRetries: parsePositiveInt(process.env.MAX_RETRIES, 5, 'MAX_RETRIES'),
+  processingIntervalMs: parsePositiveInt(
+    process.env.PROCESSOR_INTERVAL_MS,
+    1000,
+    'PROCESSOR_INTERVAL_MS'
+  ),
 };
 
 logger.info({ config }, 'Starting Event Processor Worker');
@@ -25,13 +42,17 @@ const processor = new OutboxProcessor(
 
 // Polling loop
 let isShuttingDown = false;
+let inFlight: Promise<void> | null = null;
 
 const runLoop = async () => {
   while (!isShuttingDown) {
     try {
-      await processor.processNextBatch();
+      inFlight = processor.processNextBatch();
+      await inFlight;
     } catch (error) {
       logger.error({ error }, 'Loop error');
+    } finally {
+      inFlight = null;
     }
 
     // Wait before next iteration
@@ -43,12 +64,18 @@ const runLoop = async () => {
 
 // Graceful shutdown
 const shutdown = async (signal: string) => {
+  if (isShuttingDown) return;
   logger.info({ signal }, 'Received shutdown signal');
 
   isShuttingDown = true;
 
   // Wait for current batch to finish (max 10s)
-  await new Promise((resolve) => setTimeout(resolve, 10000));
+  const timeout = new Promise((resolve) => setTimeout(resolve, 10000));
+  if (inFlight) {
+    await Promise.race([inFlight, timeout]);
+  } else {
+    await timeout;
+  }
 
   await closeDatabase();
 

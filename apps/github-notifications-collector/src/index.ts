@@ -12,7 +12,11 @@ const config = {
   schedule: process.env.COLLECTOR_SCHEDULE || '*/5 * * * *',
 };
 
-logger.info({ config }, 'Starting GitHub Notifications Collector');
+const safeConfig = {
+  ...config,
+  ghToken: config.ghToken ? '***' : undefined,
+};
+logger.info({ config: safeConfig }, 'Starting GitHub Notifications Collector');
 
 // Create services
 const collector = new CollectorService(

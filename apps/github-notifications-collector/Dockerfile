@@ -56,6 +56,10 @@ COPY --from=builder /app/apps/github-notifications-collector/dist ./apps/github-
 # Install production dependencies only
 RUN pnpm install --prod --frozen-lockfile
 
+RUN addgroup -S app && adduser -S app -G app
+RUN chown -R app:app /app
+USER app
+
 WORKDIR /app/apps/github-notifications-collector
 
 CMD ["node", "dist/index.js"]

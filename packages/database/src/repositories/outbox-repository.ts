@@ -16,7 +16,7 @@ export class OutboxRepository {
     // Using raw SQL for FOR UPDATE SKIP LOCKED
     const events = await client.execute<OutboxEvent>(sql`
       SELECT * FROM ${outboxEvents}
-      WHERE ${outboxEvents.status} IN (${EventStatus.PENDING}, ${EventStatus.FAILED})
+      WHERE ${outboxEvents.status} = ${EventStatus.PENDING}
         AND ${outboxEvents.scheduledAt} <= NOW()
       ORDER BY ${outboxEvents.createdAt} ASC
       LIMIT ${batchSize}
@@ -73,7 +73,7 @@ export class OutboxRepository {
         retryCount: newRetryCount,
         errorMessage,
         lastErrorAt: new Date(),
-        scheduledAt: sql`NOW() + INTERVAL '${retryDelayMinutes} minutes'`,
+        scheduledAt: sql`NOW() + (${retryDelayMinutes} * INTERVAL '1 minute')`,
       })
       .where(eq(outboxEvents.id, eventId));
   }

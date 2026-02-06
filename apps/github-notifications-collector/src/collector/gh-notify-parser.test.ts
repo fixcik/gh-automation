@@ -130,5 +130,57 @@ This is invalid line
       expect(diff).toBeGreaterThan(1.9 * 24 * 60 * 60 * 1000);
       expect(diff).toBeLessThan(2.1 * 24 * 60 * 60 * 1000);
     });
+
+    it('should parse long format time (21min ago)', () => {
+      const output = '•  21min ago   owner/repo  Issue  #1  mention  test';
+      const result = parser.parse(output);
+
+      const now = new Date();
+      const diff = now.getTime() - result[0].updatedAt.getTime();
+
+      // Should be around 21 minutes
+      expect(diff).toBeGreaterThan(20 * 60 * 1000);
+      expect(diff).toBeLessThan(22 * 60 * 1000);
+    });
+
+    it('should parse long format time (2h ago)', () => {
+      const output = '•  2h ago   owner/repo  Issue  #1  mention  test';
+      const result = parser.parse(output);
+
+      const now = new Date();
+      const diff = now.getTime() - result[0].updatedAt.getTime();
+
+      // Should be around 2 hours
+      expect(diff).toBeGreaterThan(1.9 * 60 * 60 * 1000);
+      expect(diff).toBeLessThan(2.1 * 60 * 60 * 1000);
+    });
+  });
+
+  describe('ANSI codes stripping', () => {
+    it('should parse notification with ANSI color codes', () => {
+      // Real output from gh notify with colors
+      const output = '\x1b[35m●\x1b[0m  \x1b[90m21min ago\x1b[0m  \x1b[36mfixcik\x1b[0m/\x1b[1;36mgh-automation\x1b[0m  \x1b[1;37mPullRequest\x1b[0m  \x1b[0;32m#1\x1b[0m  \x1b[90mauthor\x1b[0m  feat: Initial implementation';
+      const result = parser.parse(output);
+
+      expect(result).toHaveLength(1);
+      expect(result[0]).toMatchObject({
+        repository: 'fixcik/gh-automation',
+        subjectType: 'PullRequest',
+        subjectNumber: 1,
+        subjectTitle: 'feat: Initial implementation',
+        reason: 'author',
+        read: false,
+      });
+    });
+
+    it('should parse multiple notifications with ANSI codes', () => {
+      const output = `\x1b[35m●\x1b[0m  \x1b[90m20min ago\x1b[0m  \x1b[36mowner\x1b[0m/\x1b[1;36mrepo1\x1b[0m  \x1b[1;37mPullRequest\x1b[0m  \x1b[0;32m#1\x1b[0m  \x1b[90mauthor\x1b[0m  feat: one
+\x1b[35m \x1b[0m  \x1b[90m2h ago\x1b[0m  \x1b[36mowner\x1b[0m/\x1b[1;36mrepo2\x1b[0m  \x1b[1;37mIssue\x1b[0m  \x1b[0;32m#2\x1b[0m  \x1b[90mmention\x1b[0m  bug: two`;
+      const result = parser.parse(output);
+
+      expect(result).toHaveLength(2);
+      expect(result[0].repository).toBe('owner/repo1');
+      expect(result[1].repository).toBe('owner/repo2');
+    });
   });
 });

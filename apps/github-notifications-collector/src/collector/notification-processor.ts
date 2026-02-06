@@ -15,6 +15,7 @@ export class NotificationProcessor {
 
   private processOne(parsed: ParsedNotification): NewGithubNotification {
     const notificationId = this.generateNotificationId(parsed);
+    const now = new Date();
 
     return {
       notificationId,
@@ -26,8 +27,8 @@ export class NotificationProcessor {
       reason: this.mapReason(parsed.reason),
       read: parsed.read,
       updatedAt: parsed.updatedAt,
-      firstSeenAt: new Date(),
-      lastSeenAt: new Date(),
+      firstSeenAt: now,
+      lastSeenAt: now,
     };
   }
 

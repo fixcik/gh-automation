@@ -13,7 +13,10 @@ import { ParsedNotification } from '../types/parsed-notification.js';
  * • - не прочитано (read=false)
  */
 export class GhNotifyParser {
-  private readonly LINE_REGEX = /^([✓•])\s+(\S+)\s+(\S+)\s+(\w+)\s+(?:#(\d+))?\s+(\w+)\s+(.+)$/;
+  // Регулярка поддерживает оба формата времени: "2m" и "21min ago"
+  private readonly LINE_REGEX = /^([✓•●\s])\s+(\S+(?:\s+ago)?)\s+(\S+)\s+(\w+)\s+(?:#(\d+))?\s+(\w+)\s+(.+)$/;
+  // eslint-disable-next-line no-control-regex
+  private readonly ANSI_REGEX = /\x1b\[[0-9;]*m/g;
 
   parse(output: string): ParsedNotification[] {
     const lines = output.trim().split('\n').filter(line => line.trim().length > 0);
@@ -34,8 +37,17 @@ export class GhNotifyParser {
     return notifications;
   }
 
+  /**
+   * Удаляет ANSI escape-коды из строки
+   */
+  private stripAnsi(text: string): string {
+    return text.replace(this.ANSI_REGEX, '');
+  }
+
   private parseLine(line: string): ParsedNotification | null {
-    const match = line.match(this.LINE_REGEX);
+    // Убираем ANSI коды перед парсингом
+    const cleanLine = this.stripAnsi(line);
+    const match = cleanLine.match(this.LINE_REGEX);
 
     if (!match) {
       return null;
@@ -43,7 +55,7 @@ export class GhNotifyParser {
 
     const [, readSymbol, timeAgo, repository, subjectType, numberStr, reason, title] = match;
 
-    const read = readSymbol === '✓';
+    const read = readSymbol.trim() === '✓' || readSymbol.trim() === '';
     const subjectNumber = numberStr ? parseInt(numberStr, 10) : null;
     const updatedAt = this.parseTimeAgo(timeAgo);
 
@@ -63,22 +75,35 @@ export class GhNotifyParser {
   }
 
   /**
-   * Парсит относительное время (2m, 5h, 1d, 3w, 2mo, 1y) в Date
+   * Парсит относительное время (2m, 5h, 1d, 3w, 2mo, 1y, 21min ago, 2h ago) в Date
    */
   private parseTimeAgo(timeAgo: string): Date {
     const now = new Date();
-    const match = timeAgo.match(/^(\d+)([mhdwMy])$/);
 
-    if (!match) {
-      // Если формат неизвестен, возвращаем текущее время
-      return now;
+    // Поддержка формата "21min ago", "2h ago", "3d ago"
+    const longMatch = timeAgo.match(/^(\d+)(min|h|d|w|mo|y)\s+ago$/);
+    if (longMatch) {
+      const [, amountStr, unit] = longMatch;
+      const amount = parseInt(amountStr, 10);
+      return this.calculateTimeOffset(now, amount, unit);
     }
 
-    const [, amountStr, unit] = match;
-    const amount = parseInt(amountStr, 10);
+    // Поддержка короткого формата "2m", "5h", "1d"
+    const shortMatch = timeAgo.match(/^(\d+)([mhdwMy])$/);
+    if (shortMatch) {
+      const [, amountStr, unit] = shortMatch;
+      const amount = parseInt(amountStr, 10);
+      return this.calculateTimeOffset(now, amount, unit);
+    }
 
+    // Если формат неизвестен, возвращаем текущее время
+    return now;
+  }
+
+  private calculateTimeOffset(now: Date, amount: number, unit: string): Date {
     switch (unit) {
-      case 'm': // minutes
+      case 'm':
+      case 'min': // minutes
         return new Date(now.getTime() - amount * 60 * 1000);
       case 'h': // hours
         return new Date(now.getTime() - amount * 60 * 60 * 1000);
@@ -86,7 +111,8 @@ export class GhNotifyParser {
         return new Date(now.getTime() - amount * 24 * 60 * 60 * 1000);
       case 'w': // weeks
         return new Date(now.getTime() - amount * 7 * 24 * 60 * 60 * 1000);
-      case 'M': // months (approximation: 30 days)
+      case 'M':
+      case 'mo': // months (approximation: 30 days)
         return new Date(now.getTime() - amount * 30 * 24 * 60 * 60 * 1000);
       case 'y': // years (approximation: 365 days)
         return new Date(now.getTime() - amount * 365 * 24 * 60 * 60 * 1000);
