@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NatsPublisher } from '../publisher.js';
-import { STREAM_CONFIG } from '../stream-config.js';
+import { GITHUB_EVENTS_STREAM_CONFIG } from '../stream-config.js';
 
 // Mock NATS objects
 function createMockJs() {
@@ -37,7 +37,12 @@ describe('NatsPublisher', () => {
     mockJs = createMockJs();
     mockJsm = createMockJsm();
     mockLogger = createMockLogger();
-    publisher = new NatsPublisher(mockJs as any, mockJsm as any, mockLogger, STREAM_CONFIG);
+    publisher = new NatsPublisher(
+      mockJs as any,
+      mockJsm as any,
+      mockLogger,
+      GITHUB_EVENTS_STREAM_CONFIG
+    );
   });
 
   it('should publish event to correct subject', async () => {

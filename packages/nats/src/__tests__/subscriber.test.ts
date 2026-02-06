@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { STREAM_NAME } from '../stream-config.js';
+import { GITHUB_EVENTS_STREAM_NAME } from '../stream-config.js';
 import { NatsSubscriber } from '../subscriber.js';
 
 function createMockConsumer() {
@@ -50,7 +50,12 @@ describe('NatsSubscriber', () => {
     mockJs = createMockJs();
     mockJsm = createMockJsm();
     mockLogger = createMockLogger();
-    subscriber = new NatsSubscriber(mockJs as any, mockJsm as any, mockLogger, STREAM_NAME);
+    subscriber = new NatsSubscriber(
+      mockJs as any,
+      mockJsm as any,
+      mockLogger,
+      GITHUB_EVENTS_STREAM_NAME
+    );
   });
 
   it('should ensure consumer exists before subscribing', async () => {

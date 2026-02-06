@@ -3,8 +3,8 @@ import { createLogger } from '@gh-automation/logger';
 import {
   closeNatsConnection,
   createNatsPublisher,
+  GITHUB_EVENTS_STREAM_CONFIG,
   getNatsConnection,
-  STREAM_CONFIG,
 } from '@gh-automation/nats';
 import { OutboxProcessor } from './outbox-processor.js';
 
@@ -43,7 +43,7 @@ const initializeProcessor = async (): Promise<OutboxProcessor> => {
   }
 
   const nc = await getNatsConnection({ url: config.natsUrl }, logger);
-  const publisher = await createNatsPublisher(nc, logger, STREAM_CONFIG);
+  const publisher = await createNatsPublisher(nc, logger, GITHUB_EVENTS_STREAM_CONFIG);
   logger.info('NATS publisher initialized');
 
   return new OutboxProcessor(
