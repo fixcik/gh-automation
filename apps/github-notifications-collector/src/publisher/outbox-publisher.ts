@@ -88,14 +88,14 @@ export class OutboxPublisher {
         subjectUrl: notification.subjectUrl,
         reason: notification.reason as NotificationReason,
         read: notification.read,
-        updatedAt: notification.updatedAt,
-        firstSeenAt: notification.firstSeenAt,
-        lastSeenAt: notification.lastSeenAt,
+        updatedAt: notification.updatedAt.toISOString(),
+        firstSeenAt: notification.firstSeenAt.toISOString(),
+        lastSeenAt: notification.lastSeenAt.toISOString(),
       },
       metadata: {
         source: 'gh-notify-collector',
       },
-      createdAt: new Date(),
+      createdAt: new Date().toISOString(),
     };
   }
 }

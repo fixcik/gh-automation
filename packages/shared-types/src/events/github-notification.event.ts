@@ -15,13 +15,13 @@ export interface GithubNotificationEvent {
     subjectUrl: string | null;
     reason: NotificationReason;
     read: boolean;
-    updatedAt: Date;
-    firstSeenAt: Date;
-    lastSeenAt: Date;
+    updatedAt: string; // ISO 8601
+    firstSeenAt: string; // ISO 8601
+    lastSeenAt: string; // ISO 8601
   };
   metadata?: {
     source?: string;
     [key: string]: unknown;
   };
-  createdAt: Date;
+  createdAt: string; // ISO 8601
 }
