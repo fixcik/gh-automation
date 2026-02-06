@@ -1,6 +1,11 @@
 import { closeDatabase } from '@gh-automation/database';
 import { createLogger } from '@gh-automation/logger';
-import { closeNatsConnection, createNatsPublisher, getNatsConnection } from '@gh-automation/nats';
+import {
+  closeNatsConnection,
+  createNatsPublisher,
+  getNatsConnection,
+  STREAM_CONFIG,
+} from '@gh-automation/nats';
 import { OutboxProcessor } from './outbox-processor.js';
 
 const logger = createLogger('event-processor-worker', '0.0.1');
@@ -38,7 +43,7 @@ const initializeProcessor = async (): Promise<OutboxProcessor> => {
   }
 
   const nc = await getNatsConnection({ url: config.natsUrl }, logger);
-  const publisher = await createNatsPublisher(nc, logger);
+  const publisher = await createNatsPublisher(nc, logger, STREAM_CONFIG);
   logger.info('NATS publisher initialized');
 
   return new OutboxProcessor(

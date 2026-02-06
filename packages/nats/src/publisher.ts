@@ -1,6 +1,6 @@
 import type { Logger } from '@gh-automation/logger';
 import type { JetStreamClient, JetStreamManager } from '@nats-io/jetstream';
-import { STREAM_CONFIG, type StreamConfig } from './stream-config.js';
+import type { StreamConfig } from './stream-config.js';
 
 export interface PublishableEvent {
   eventId: string;
@@ -12,16 +12,13 @@ export interface PublishableEvent {
 
 export class NatsPublisher {
   private streamEnsured = false;
-  private readonly streamConfig: StreamConfig;
 
   constructor(
     private readonly js: JetStreamClient,
     private readonly jsm: JetStreamManager,
     private readonly logger: Logger,
-    streamConfig?: StreamConfig
-  ) {
-    this.streamConfig = streamConfig ?? STREAM_CONFIG;
-  }
+    private readonly streamConfig: StreamConfig
+  ) {}
 
   async ensureStream(): Promise<void> {
     if (this.streamEnsured) return;
