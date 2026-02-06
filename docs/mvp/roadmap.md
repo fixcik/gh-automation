@@ -210,7 +210,9 @@ export async function createNatsSubscriber(
 
 ---
 
-## Phase 1: claude-job-runner — scaffold + core
+## Phase 1: claude-job-runner — scaffold + core ✅ DONE
+
+**Status:** Завершена. PR: https://github.com/fixcik/gh-automation/pull/8
 
 **Goal:** Сервис получает job request из NATS, клонирует репо, запускает `claude -p`, возвращает результат.
 
