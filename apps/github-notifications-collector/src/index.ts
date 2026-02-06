@@ -1,5 +1,5 @@
-import { createLogger } from '@gh-automation/logger';
 import { closeDatabase } from '@gh-automation/database';
+import { createLogger } from '@gh-automation/logger';
 import { CollectorService } from './collector/collector-service.js';
 import { CronScheduler } from './scheduler/cron-scheduler.js';
 

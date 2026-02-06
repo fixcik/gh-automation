@@ -1,6 +1,6 @@
-import { NewGithubNotification } from '@gh-automation/database';
+import type { NewGithubNotification } from '@gh-automation/database';
 import { NotificationReason, SubjectType } from '@gh-automation/shared-types';
-import { ParsedNotification } from '../types/parsed-notification.js';
+import type { ParsedNotification } from '../types/parsed-notification.js';
 
 /**
  * NotificationProcessor обрабатывает спарсенные нотификации:

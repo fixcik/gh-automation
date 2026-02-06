@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm';
-import { db, DbTransaction } from '../client';
-import { collectorState, CollectorState, UpdateCollectorState } from '../schema';
+import { type DbTransaction, db } from '../client';
+import { type CollectorState, collectorState, type UpdateCollectorState } from '../schema';
 
 export class CollectorStateRepository {
   async get(tx?: DbTransaction): Promise<CollectorState | undefined> {
@@ -44,11 +44,7 @@ export class CollectorStateRepository {
     return state;
   }
 
-  async incrementCounters(
-    collected: number,
-    published: number,
-    tx?: DbTransaction
-  ): Promise<void> {
+  async incrementCounters(collected: number, published: number, tx?: DbTransaction): Promise<void> {
     const client = tx || db;
     const current = await this.get(tx);
 

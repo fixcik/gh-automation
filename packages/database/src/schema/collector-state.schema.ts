@@ -1,5 +1,5 @@
-import { pgTable, integer, timestamp, bigint, check } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
+import { bigint, check, integer, pgTable, timestamp } from 'drizzle-orm/pg-core';
 
 export const collectorState = pgTable(
   'collector_state',

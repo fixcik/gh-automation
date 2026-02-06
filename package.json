@@ -11,6 +11,8 @@
     "build": "turbo run build",
     "dev": "turbo run dev --parallel",
     "lint": "turbo run lint",
+    "format": "biome format --write .",
+    "check": "biome check --write .",
     "test": "turbo run test",
     "infra": "docker-compose up -d postgres",
     "infra:migrate": "docker-compose up -d postgres && docker-compose up migrate",

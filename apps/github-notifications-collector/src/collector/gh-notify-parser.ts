@@ -1,4 +1,4 @@
-import { ParsedNotification } from '../types/parsed-notification.js';
+import type { ParsedNotification } from '../types/parsed-notification.js';
 
 /**
  * GhNotifyParser парсит табличный вывод команды `gh notify -an <limit> -s`
@@ -14,12 +14,16 @@ import { ParsedNotification } from '../types/parsed-notification.js';
  */
 export class GhNotifyParser {
   // Регулярка поддерживает оба формата времени: "2m" и "21min ago"
-  private readonly LINE_REGEX = /^([✓•●\s])\s+(\S+(?:\s+ago)?)\s+(\S+)\s+(\w+)\s+(?:#(\d+))?\s+(\w+)\s+(.+)$/;
+  private readonly LINE_REGEX =
+    /^([✓•●\s])\s+(\S+(?:\s+ago)?)\s+(\S+)\s+(\w+)\s+(?:#(\d+))?\s+(\w+)\s+(.+)$/;
   // eslint-disable-next-line no-control-regex
   private readonly ANSI_REGEX = /\x1b\[[0-9;]*m/g;
 
   parse(output: string): ParsedNotification[] {
-    const lines = output.trim().split('\n').filter(line => line.trim().length > 0);
+    const lines = output
+      .trim()
+      .split('\n')
+      .filter((line) => line.trim().length > 0);
     const notifications: ParsedNotification[] = [];
 
     for (const line of lines) {

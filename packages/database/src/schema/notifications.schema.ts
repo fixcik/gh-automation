@@ -1,4 +1,13 @@
-import { pgTable, bigserial, varchar, text, boolean, timestamp, integer, index } from 'drizzle-orm/pg-core';
+import {
+  bigserial,
+  boolean,
+  index,
+  integer,
+  pgTable,
+  text,
+  timestamp,
+  varchar,
+} from 'drizzle-orm/pg-core';
 
 export const githubNotifications = pgTable(
   'github_notifications',

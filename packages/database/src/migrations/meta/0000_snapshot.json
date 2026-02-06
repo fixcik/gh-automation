@@ -143,9 +143,7 @@
         "github_notifications_notification_id_unique": {
           "name": "github_notifications_notification_id_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "notification_id"
-          ]
+          "columns": ["notification_id"]
         }
       },
       "policies": {},
@@ -282,9 +280,7 @@
         "outbox_events_event_id_unique": {
           "name": "outbox_events_event_id_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "event_id"
-          ]
+          "columns": ["event_id"]
         }
       },
       "policies": {},

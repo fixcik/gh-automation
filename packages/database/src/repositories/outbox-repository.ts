@@ -1,7 +1,7 @@
-import { and, eq, lte, inArray, sql } from 'drizzle-orm';
-import { db, DbTransaction } from '../client';
-import { outboxEvents, NewOutboxEvent, OutboxEvent } from '../schema';
 import { EventStatus } from '@gh-automation/shared-types';
+import { eq, sql } from 'drizzle-orm';
+import { type DbTransaction, db } from '../client';
+import { type NewOutboxEvent, type OutboxEvent, outboxEvents } from '../schema';
 
 export class OutboxRepository {
   async insert(data: NewOutboxEvent, tx?: DbTransaction): Promise<OutboxEvent> {

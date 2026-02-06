@@ -1,5 +1,5 @@
-import { NotificationReason } from '../enums/notification-reason.enum';
-import { SubjectType } from '../enums/subject-type.enum';
+import type { NotificationReason } from '../enums/notification-reason.enum';
+import type { SubjectType } from '../enums/subject-type.enum';
 
 export interface GithubNotificationEvent {
   eventId: string;
