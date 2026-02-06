@@ -53,13 +53,17 @@ const initialize = async () => {
   return { consumer: jobConsumer, executor };
 };
 
-const shutdown = async (signal: string) => {
+const shutdown = async (signal: string, exitCode = 0) => {
   if (isShuttingDown) return;
   isShuttingDown = true;
   logger.info({ signal }, 'Received shutdown signal');
 
   if (jobConsumer) {
-    await jobConsumer.stop();
+    try {
+      await jobConsumer.stop();
+    } catch (error) {
+      logger.warn({ error }, 'Failed to stop consumer');
+    }
   }
 
   try {
@@ -69,7 +73,7 @@ const shutdown = async (signal: string) => {
   }
 
   logger.info('Shutdown complete');
-  process.exit(0);
+  process.exit(exitCode);
 };
 
 process.on('SIGTERM', () => shutdown('SIGTERM'));
@@ -84,7 +88,7 @@ initialize()
       });
     } catch (error) {
       logger.error({ error }, 'Consumer loop failed');
-      await shutdown('error');
+      await shutdown('error', 1);
     }
   })
   .catch((error) => {
