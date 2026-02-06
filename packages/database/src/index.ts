@@ -1,4 +1,4 @@
-export { db, closeDatabase } from './client';
 export type { DbTransaction } from './client';
-export * from './schema';
+export { closeDatabase, db } from './client';
 export * from './repositories';
+export * from './schema';

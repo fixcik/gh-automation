@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { GhNotifyParser } from './gh-notify-parser.js';
 
 describe('GhNotifyParser', () => {
@@ -67,7 +67,8 @@ describe('GhNotifyParser', () => {
     });
 
     it('should handle truncated repository names', () => {
-      const output = '•  2m   very-long-owner/ver...  PullRequest  #123  mention  feat: add feature';
+      const output =
+        '•  2m   very-long-owner/ver...  PullRequest  #123  mention  feat: add feature';
       const result = parser.parse(output);
 
       expect(result).toHaveLength(1);
@@ -159,7 +160,8 @@ This is invalid line
   describe('ANSI codes stripping', () => {
     it('should parse notification with ANSI color codes', () => {
       // Real output from gh notify with colors
-      const output = '\x1b[35m●\x1b[0m  \x1b[90m21min ago\x1b[0m  \x1b[36mfixcik\x1b[0m/\x1b[1;36mgh-automation\x1b[0m  \x1b[1;37mPullRequest\x1b[0m  \x1b[0;32m#1\x1b[0m  \x1b[90mauthor\x1b[0m  feat: Initial implementation';
+      const output =
+        '\x1b[35m●\x1b[0m  \x1b[90m21min ago\x1b[0m  \x1b[36mfixcik\x1b[0m/\x1b[1;36mgh-automation\x1b[0m  \x1b[1;37mPullRequest\x1b[0m  \x1b[0;32m#1\x1b[0m  \x1b[90mauthor\x1b[0m  feat: Initial implementation';
       const result = parser.parse(output);
 
       expect(result).toHaveLength(1);

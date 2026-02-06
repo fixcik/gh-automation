@@ -1,6 +1,6 @@
+import type { Logger } from '@gh-automation/logger';
 import cron from 'node-cron';
-import { Logger } from '@gh-automation/logger';
-import { CollectorService } from '../collector/collector-service.js';
+import type { CollectorService } from '../collector/collector-service.js';
 
 export interface SchedulerConfig {
   schedule: string; // Cron expression, e.g., '*/5 * * * *'
@@ -31,10 +31,7 @@ export class CronScheduler {
       throw new Error(`Invalid cron expression: ${this.config.schedule}`);
     }
 
-    this.logger.info(
-      { schedule: this.config.schedule },
-      'Starting cron scheduler'
-    );
+    this.logger.info({ schedule: this.config.schedule }, 'Starting cron scheduler');
 
     this.task = cron.schedule(this.config.schedule, async () => {
       await this.runCollection();

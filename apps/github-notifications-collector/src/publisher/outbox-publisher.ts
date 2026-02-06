@@ -1,10 +1,6 @@
-import {
-  GithubNotification,
-  OutboxRepository,
-  DbTransaction,
-} from '@gh-automation/database';
-import { GithubNotificationEvent, EventStatus } from '@gh-automation/shared-types';
-import { Logger } from '@gh-automation/logger';
+import type { DbTransaction, GithubNotification, OutboxRepository } from '@gh-automation/database';
+import type { Logger } from '@gh-automation/logger';
+import { EventStatus, type GithubNotificationEvent } from '@gh-automation/shared-types';
 
 /**
  * OutboxPublisher публикует события в outbox таблицу

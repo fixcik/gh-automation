@@ -1,7 +1,7 @@
-import { describe, it, expect } from 'vitest';
+import { NotificationReason, SubjectType } from '@gh-automation/shared-types';
+import { describe, expect, it } from 'vitest';
+import type { ParsedNotification } from '../types/parsed-notification.js';
 import { NotificationProcessor } from './notification-processor.js';
-import { SubjectType, NotificationReason } from '@gh-automation/shared-types';
-import { ParsedNotification } from '../types/parsed-notification.js';
 
 describe('NotificationProcessor', () => {
   const processor = new NotificationProcessor();

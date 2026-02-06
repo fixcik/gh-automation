@@ -1,14 +1,14 @@
-import { execa } from 'execa';
 import {
+  CollectorStateRepository,
   db,
   NotificationRepository,
   OutboxRepository,
-  CollectorStateRepository,
 } from '@gh-automation/database';
-import { Logger } from '@gh-automation/logger';
+import type { Logger } from '@gh-automation/logger';
+import { execa } from 'execa';
+import { OutboxPublisher } from '../publisher/outbox-publisher.js';
 import { GhNotifyParser } from './gh-notify-parser.js';
 import { NotificationProcessor } from './notification-processor.js';
-import { OutboxPublisher } from '../publisher/outbox-publisher.js';
 
 export interface CollectorConfig {
   ghNotifyLimit: number;

@@ -1,6 +1,10 @@
 import { eq } from 'drizzle-orm';
-import { db, DbTransaction } from '../client';
-import { githubNotifications, NewGithubNotification, GithubNotification } from '../schema';
+import { type DbTransaction, db } from '../client';
+import {
+  type GithubNotification,
+  githubNotifications,
+  type NewGithubNotification,
+} from '../schema';
 
 export class NotificationRepository {
   async insert(data: NewGithubNotification, tx?: DbTransaction): Promise<GithubNotification> {
@@ -27,7 +31,10 @@ export class NotificationRepository {
     return notification;
   }
 
-  async findByNotificationId(notificationId: string, tx?: DbTransaction): Promise<GithubNotification | undefined> {
+  async findByNotificationId(
+    notificationId: string,
+    tx?: DbTransaction
+  ): Promise<GithubNotification | undefined> {
     const client = tx || db;
     const [notification] = await client
       .select()

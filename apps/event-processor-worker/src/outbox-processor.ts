@@ -1,6 +1,5 @@
-import { db, OutboxRepository, OutboxEvent } from '@gh-automation/database';
-import { EventStatus } from '@gh-automation/shared-types';
-import { Logger } from '@gh-automation/logger';
+import { db, type OutboxEvent, OutboxRepository } from '@gh-automation/database';
+import type { Logger } from '@gh-automation/logger';
 
 export interface ProcessorConfig {
   batchSize: number;
@@ -123,7 +122,7 @@ export class OutboxProcessor {
     );
 
     // Exponential backoff: 2^retryCount минут
-    const retryDelayMinutes = Math.pow(2, event.retryCount + 1);
+    const retryDelayMinutes = 2 ** (event.retryCount + 1);
 
     await this.repo.scheduleRetry(event.id, errorMessage, retryDelayMinutes);
 

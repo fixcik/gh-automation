@@ -1,14 +1,10 @@
-import { createLogger } from '@gh-automation/logger';
 import { closeDatabase } from '@gh-automation/database';
+import { createLogger } from '@gh-automation/logger';
 import { OutboxProcessor } from './outbox-processor.js';
 
 const logger = createLogger('event-processor-worker', '0.0.1');
 
-const parsePositiveInt = (
-  value: string | undefined,
-  fallback: number,
-  name: string
-) => {
+const parsePositiveInt = (value: string | undefined, fallback: number, name: string) => {
   const parsed = Number.parseInt(value ?? '', 10);
   if (!Number.isFinite(parsed) || parsed <= 0) {
     logger.warn({ value }, `Invalid ${name}; using default ${fallback}`);
@@ -56,9 +52,7 @@ const runLoop = async () => {
     }
 
     // Wait before next iteration
-    await new Promise((resolve) =>
-      setTimeout(resolve, config.processingIntervalMs)
-    );
+    await new Promise((resolve) => setTimeout(resolve, config.processingIntervalMs));
   }
 };
 

@@ -8,7 +8,10 @@
     "build": "tsc",
     "dev": "tsx watch --env-file=../../.env src/index.ts",
     "start": "node --env-file=../../.env dist/index.js",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "lint": "biome lint src/",
+    "format": "biome format --write src/",
+    "check": "biome check --write src/"
   },
   "dependencies": {
     "@gh-automation/database": "workspace:*",

@@ -7,6 +7,9 @@
   "scripts": {
     "build": "tsc",
     "clean": "rm -rf dist",
+    "lint": "biome lint src/",
+    "format": "biome format --write src/",
+    "check": "biome check --write src/",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/migrate.ts",
     "db:studio": "drizzle-kit studio"
