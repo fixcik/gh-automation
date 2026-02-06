@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { NewGithubNotification } from '@gh-automation/database';
 import { NotificationReason, SubjectType } from '@gh-automation/shared-types';
 import type { ParsedNotification } from '../types/parsed-notification.js';
@@ -53,16 +54,10 @@ export class NotificationProcessor {
   }
 
   /**
-   * Простой хеш для генерации короткого ID
+   * Генерирует SHA-256 хеш для короткого ID (12 символов hex)
    */
   private simpleHash(str: string): string {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-      const char = str.charCodeAt(i);
-      hash = (hash << 5) - hash + char;
-      hash = hash & hash; // Convert to 32bit integer
-    }
-    return Math.abs(hash).toString(36);
+    return createHash('sha256').update(str).digest('hex').slice(0, 12);
   }
 
   /**
