@@ -3,7 +3,6 @@ import type { Logger } from '@gh-automation/logger';
 
 export interface ProcessorConfig {
   batchSize: number;
-  maxRetries: number;
   processingIntervalMs: number;
 }
 
