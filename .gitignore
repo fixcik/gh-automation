@@ -1,3 +1,6 @@
+# Override global gitignore — we want CLAUDE.md committed
+!CLAUDE.md
+
 # Dependencies
 node_modules
 .pnp
