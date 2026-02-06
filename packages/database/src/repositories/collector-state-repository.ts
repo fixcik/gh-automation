@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { type DbTransaction, db } from '../client';
 import { type CollectorState, collectorState, type UpdateCollectorState } from '../schema';
 
@@ -22,7 +22,11 @@ export class CollectorStateRepository {
       .returning();
 
     if (!state) {
-      return (await this.get(tx))!;
+      const existing = await this.get(tx);
+      if (!existing) {
+        throw new Error('Failed to initialize collector state: row not found after conflict');
+      }
+      return existing;
     }
 
     return state;
@@ -52,18 +56,15 @@ export class CollectorStateRepository {
 
   async incrementCounters(collected: number, published: number, tx?: DbTransaction): Promise<void> {
     const client = tx || db;
-    const current = await this.get(tx);
 
-    if (!current) {
-      await this.initialize(tx);
-      return;
-    }
+    // Ensure state row exists
+    await this.initialize(tx);
 
     await client
       .update(collectorState)
       .set({
-        totalCollected: (current.totalCollected || 0) + collected,
-        totalPublished: (current.totalPublished || 0) + published,
+        totalCollected: sql`COALESCE(${collectorState.totalCollected}, 0) + ${collected}`,
+        totalPublished: sql`COALESCE(${collectorState.totalPublished}, 0) + ${published}`,
       })
       .where(eq(collectorState.id, 1));
   }
