@@ -17,6 +17,16 @@
 - Доступы Claude настраиваются per-job (tools, model, MCP servers)
 - Telegram approval flow перед обработкой PR (кнопки Да/Нет)
 
+**Tech Stack для новых сервисов:**
+- **NestJS** — рекомендуется для всех новых сервисов (Phase 2+)
+  - Структурированная архитектура (modules, controllers, services, providers)
+  - Встроенный DI container
+  - Health checks и Prometheus metrics из коробки (`@nestjs/terminus`, `@nestjs/prometheus`)
+  - Swagger/OpenAPI для документирования API
+  - Микросервисы паттерны (@nestjs/microservices для NATS integration)
+  - Легче масштабировать и поддерживать
+- **Примечание:** `claude-job-runner` (Phase 1) реализован на plain TypeScript — можно рефакторить на NestJS в будущем для единообразия, но это не блокер для MVP
+
 ---
 
 ## Архитектура
