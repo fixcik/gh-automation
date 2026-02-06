@@ -3,12 +3,20 @@ import {
   index,
   integer,
   jsonb,
+  pgEnum,
   pgTable,
   text,
   timestamp,
   uuid,
   varchar,
 } from 'drizzle-orm/pg-core';
+
+export const eventStatusEnum = pgEnum('event_status', [
+  'PENDING',
+  'PROCESSING',
+  'PUBLISHED',
+  'FAILED',
+]);
 
 export const outboxEvents = pgTable(
   'outbox_events',
@@ -20,7 +28,7 @@ export const outboxEvents = pgTable(
     aggregateId: varchar('aggregate_id', { length: 255 }).notNull(),
     payload: jsonb('payload').notNull(),
     metadata: jsonb('metadata'),
-    status: varchar('status', { length: 20 }).notNull().default('PENDING'),
+    status: eventStatusEnum('status').notNull().default('PENDING'),
     retryCount: integer('retry_count').notNull().default(0),
     maxRetries: integer('max_retries').notNull().default(5),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
