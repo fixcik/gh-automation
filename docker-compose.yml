@@ -20,6 +20,18 @@ services:
     networks:
       - gh-automation
 
+  nats:
+    image: nats:2-alpine
+    container_name: gh-automation-nats
+    command: ["--jetstream", "--store_dir=/data"]
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    volumes:
+      - nats_data:/data
+    networks:
+      - gh-automation
+
   # Migration runner - runs once and exits
   migrate:
     build:
@@ -68,8 +80,11 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
+      nats:
+        condition: service_started
     environment:
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/gh_automation
+      NATS_URL: nats://nats:4222
       PROCESSOR_INTERVAL_MS: ${PROCESSOR_INTERVAL_MS:-1000}
       BATCH_SIZE: ${BATCH_SIZE:-100}
       LOG_LEVEL: ${LOG_LEVEL:-info}
@@ -79,6 +94,7 @@ services:
 
 volumes:
   postgres_data:
+  nats_data:
 
 networks:
   gh-automation:
