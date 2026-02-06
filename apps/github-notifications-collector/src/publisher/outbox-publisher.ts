@@ -1,6 +1,11 @@
 import type { DbTransaction, GithubNotification, OutboxRepository } from '@gh-automation/database';
 import type { Logger } from '@gh-automation/logger';
-import { EventStatus, type GithubNotificationEvent } from '@gh-automation/shared-types';
+import {
+  EventStatus,
+  type GithubNotificationEvent,
+  type NotificationReason,
+  type SubjectType,
+} from '@gh-automation/shared-types';
 
 /**
  * OutboxPublisher публикует события в outbox таблицу
@@ -24,6 +29,7 @@ export class OutboxPublisher {
         eventType: event.eventType,
         aggregateType: event.aggregateType,
         aggregateId: event.aggregateId,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Drizzle jsonb column accepts any serializable value
         payload: event.payload as any,
         metadata: event.metadata as any,
         status: EventStatus.PENDING,
@@ -76,11 +82,11 @@ export class OutboxPublisher {
       payload: {
         notificationId: notification.notificationId,
         repository: notification.repository,
-        subjectType: notification.subjectType as any,
+        subjectType: notification.subjectType as SubjectType,
         subjectNumber: notification.subjectNumber,
         subjectTitle: notification.subjectTitle,
         subjectUrl: notification.subjectUrl,
-        reason: notification.reason as any,
+        reason: notification.reason as NotificationReason,
         read: notification.read,
         updatedAt: notification.updatedAt,
         firstSeenAt: notification.firstSeenAt,
