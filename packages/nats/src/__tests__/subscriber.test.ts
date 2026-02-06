@@ -90,3 +90,37 @@ describe('NatsSubscriber', () => {
     expect(consumer).toBeDefined();
   });
 });
+
+describe('NatsSubscriber with custom stream name', () => {
+  let subscriber: NatsSubscriber;
+  let mockJs: ReturnType<typeof createMockJs>;
+  let mockJsm: ReturnType<typeof createMockJsm>;
+  let mockLogger: ReturnType<typeof createMockLogger>;
+
+  beforeEach(() => {
+    mockJs = createMockJs();
+    mockJsm = createMockJsm();
+    mockLogger = createMockLogger();
+    subscriber = new NatsSubscriber(mockJs as any, mockJsm as any, mockLogger, 'CLAUDE_JOBS');
+  });
+
+  it('should use custom stream name for ensureConsumer', async () => {
+    mockJsm.consumers.info.mockRejectedValueOnce(new Error('consumer not found'));
+    await subscriber.ensureConsumer('job-runner');
+    expect(mockJsm.consumers.add).toHaveBeenCalledWith(
+      'CLAUDE_JOBS',
+      expect.objectContaining({ durable_name: 'job-runner' })
+    );
+  });
+
+  it('should use custom stream name for getConsumer', async () => {
+    await subscriber.getConsumer('job-runner');
+    expect(mockJs.consumers.get).toHaveBeenCalledWith('CLAUDE_JOBS', 'job-runner');
+  });
+
+  it('should use default GITHUB_EVENTS when no name provided', async () => {
+    const defaultSubscriber = new NatsSubscriber(mockJs as any, mockJsm as any, mockLogger);
+    await defaultSubscriber.ensureConsumer('my-service');
+    expect(mockJsm.consumers.info).toHaveBeenCalledWith('GITHUB_EVENTS', 'my-service');
+  });
+});
