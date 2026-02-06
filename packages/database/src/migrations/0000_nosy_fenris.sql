@@ -1,3 +1,5 @@
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
 CREATE TABLE IF NOT EXISTS "github_notifications" (
 	"id" bigserial PRIMARY KEY NOT NULL,
 	"notification_id" varchar(255) NOT NULL,

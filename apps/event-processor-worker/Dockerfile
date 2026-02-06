@@ -50,6 +50,10 @@ COPY --from=builder /app/apps/event-processor-worker/dist ./apps/event-processor
 # Install production dependencies only
 RUN pnpm install --prod --frozen-lockfile
 
+RUN addgroup -S app && adduser -S app -G app
+RUN chown -R app:app /app
+USER app
+
 WORKDIR /app/apps/event-processor-worker
 
 CMD ["node", "dist/index.js"]

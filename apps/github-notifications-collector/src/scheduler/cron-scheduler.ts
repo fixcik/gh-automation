@@ -12,6 +12,7 @@ export interface SchedulerConfig {
 export class CronScheduler {
   private task: cron.ScheduledTask | null = null;
   private isRunning = false;
+  private runningPromise: Promise<void> | null = null;
 
   constructor(
     private readonly config: SchedulerConfig,
@@ -43,11 +44,15 @@ export class CronScheduler {
     this.runCollection();
   }
 
-  stop(): void {
+  async stop(): Promise<void> {
     if (this.task) {
       this.logger.info('Stopping cron scheduler');
       this.task.stop();
       this.task = null;
+    }
+    if (this.runningPromise) {
+      this.logger.info('Waiting for in-progress collection to complete');
+      await this.runningPromise;
     }
   }
 
@@ -57,6 +62,11 @@ export class CronScheduler {
       return;
     }
 
+    this.runningPromise = this._doCollection();
+    return this.runningPromise;
+  }
+
+  private async _doCollection(): Promise<void> {
     try {
       this.isRunning = true;
       await this.collector.collect();
@@ -64,6 +74,7 @@ export class CronScheduler {
       this.logger.error({ error }, 'Collection error');
     } finally {
       this.isRunning = false;
+      this.runningPromise = null;
     }
   }
 }

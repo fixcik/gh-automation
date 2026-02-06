@@ -33,9 +33,13 @@ export class OutboxProcessor {
     this.isRunning = true;
 
     try {
-      // Читаем события с FOR UPDATE SKIP LOCKED
+      // Читаем события с FOR UPDATE SKIP LOCKED и помечаем как обрабатываемые
       const events = await db.transaction(async (tx) => {
-        return await this.repo.fetchPending(this.config.batchSize, tx);
+        const events = await this.repo.fetchPending(this.config.batchSize, tx);
+        for (const event of events) {
+          await this.repo.markProcessing(event.id, tx);
+        }
+        return events;
       });
 
       if (events.length === 0) {
@@ -59,9 +63,6 @@ export class OutboxProcessor {
 
   private async processEvent(event: OutboxEvent): Promise<void> {
     try {
-      // Помечаем как обрабатываемое
-      await this.repo.markProcessing(event.id);
-
       // "Публикуем" событие (для MVP - просто логируем)
       await this.publishEvent(event);
 
