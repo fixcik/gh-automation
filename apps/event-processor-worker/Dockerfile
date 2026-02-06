@@ -44,6 +44,9 @@ COPY --from=builder /app/packages/shared-types/dist ./packages/shared-types/dist
 COPY --from=builder /app/packages/logger/package.json ./packages/logger/
 COPY --from=builder /app/packages/logger/dist ./packages/logger/dist
 
+COPY --from=builder /app/packages/nats/package.json ./packages/nats/
+COPY --from=builder /app/packages/nats/dist ./packages/nats/dist
+
 COPY --from=builder /app/apps/event-processor-worker/package.json ./apps/event-processor-worker/
 COPY --from=builder /app/apps/event-processor-worker/dist ./apps/event-processor-worker/dist
 
