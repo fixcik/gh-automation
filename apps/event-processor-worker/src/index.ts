@@ -16,7 +16,6 @@ const parsePositiveInt = (value: string | undefined, fallback: number, name: str
 // Configuration from environment
 const config = {
   batchSize: parsePositiveInt(process.env.BATCH_SIZE, 100, 'BATCH_SIZE'),
-  maxRetries: parsePositiveInt(process.env.MAX_RETRIES, 5, 'MAX_RETRIES'),
   processingIntervalMs: parsePositiveInt(
     process.env.PROCESSOR_INTERVAL_MS,
     1000,
@@ -30,7 +29,6 @@ logger.info({ config }, 'Starting Event Processor Worker');
 const processor = new OutboxProcessor(
   {
     batchSize: config.batchSize,
-    maxRetries: config.maxRetries,
     processingIntervalMs: config.processingIntervalMs,
   },
   logger
