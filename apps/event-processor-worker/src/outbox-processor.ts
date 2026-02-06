@@ -1,9 +1,14 @@
 import { db, type OutboxEvent, OutboxRepository } from '@gh-automation/database';
 import type { Logger } from '@gh-automation/logger';
+import type { PublishableEvent } from '@gh-automation/nats';
 
 export interface ProcessorConfig {
   batchSize: number;
   processingIntervalMs: number;
+}
+
+export interface EventPublisher {
+  publish(event: PublishableEvent): Promise<void>;
 }
 
 /**
@@ -19,7 +24,8 @@ export class OutboxProcessor {
 
   constructor(
     private readonly config: ProcessorConfig,
-    private readonly logger: Logger
+    private readonly logger: Logger,
+    private readonly publisher?: EventPublisher
   ) {}
 
   async processNextBatch(): Promise<void> {
@@ -134,5 +140,24 @@ export class OutboxProcessor {
         'Event moved to dead letter (max retries exceeded)'
       );
     }
+  }
+
+  static mapToPublishableEvent(event: OutboxEvent): PublishableEvent {
+    const existingMetadata =
+      event.metadata && typeof event.metadata === 'object' && !Array.isArray(event.metadata)
+        ? (event.metadata as Record<string, unknown>)
+        : {};
+
+    return {
+      eventId: event.eventId,
+      eventType: event.eventType,
+      aggregateId: event.aggregateId,
+      payload: event.payload,
+      metadata: {
+        ...existingMetadata,
+        aggregateType: event.aggregateType,
+        createdAt: event.createdAt,
+      },
+    };
   }
 }
