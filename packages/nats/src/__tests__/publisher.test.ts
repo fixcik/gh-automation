@@ -111,3 +111,43 @@ describe('NatsPublisher', () => {
     expect(mockJsm.streams.add).not.toHaveBeenCalled();
   });
 });
+
+describe('NatsPublisher with custom stream config', () => {
+  let publisher: NatsPublisher;
+  let mockJs: ReturnType<typeof createMockJs>;
+  let mockJsm: ReturnType<typeof createMockJsm>;
+  let mockLogger: ReturnType<typeof createMockLogger>;
+
+  const customStreamConfig = {
+    name: 'CLAUDE_JOBS',
+    subjects: ['claude.job.>'],
+    max_age: 604800000000000,
+    max_msgs: 100_000,
+    storage: 'file' as const,
+    num_replicas: 1,
+  };
+
+  beforeEach(() => {
+    mockJs = createMockJs();
+    mockJsm = createMockJsm();
+    mockLogger = createMockLogger();
+    publisher = new NatsPublisher(mockJs as any, mockJsm as any, mockLogger, customStreamConfig);
+  });
+
+  it('should check custom stream name in ensureStream', async () => {
+    await publisher.ensureStream();
+    expect(mockJsm.streams.info).toHaveBeenCalledWith('CLAUDE_JOBS');
+  });
+
+  it('should create custom stream with full config if it does not exist', async () => {
+    mockJsm.streams.info.mockRejectedValueOnce(new Error('stream not found'));
+    await publisher.ensureStream();
+    expect(mockJsm.streams.add).toHaveBeenCalledWith(customStreamConfig);
+  });
+
+  it('should use default GITHUB_EVENTS when no config provided', async () => {
+    const defaultPublisher = new NatsPublisher(mockJs as any, mockJsm as any, mockLogger);
+    await defaultPublisher.ensureStream();
+    expect(mockJsm.streams.info).toHaveBeenCalledWith('GITHUB_EVENTS');
+  });
+});
