@@ -1,3 +1,4 @@
+import type { Logger } from '@gh-automation/logger';
 import type { ParsedNotification } from '../types/parsed-notification.js';
 
 /**
@@ -13,6 +14,7 @@ import type { ParsedNotification } from '../types/parsed-notification.js';
  * • - не прочитано (read=false)
  */
 export class GhNotifyParser {
+  constructor(private readonly logger?: Logger) {}
   // Регулярка поддерживает оба формата времени: "2m" и "21min ago"
   private readonly LINE_REGEX =
     /^([✓•●\s])\s+(\S+(?:\s+ago)?)\s+(\S+)\s+(\w+)\s+(?:#(\d+))?\s+(\w+)\s+(.+)$/;
@@ -34,7 +36,7 @@ export class GhNotifyParser {
         }
       } catch (error) {
         // Skip invalid lines
-        console.warn(`Failed to parse line: ${line}`, error);
+        this.logger?.warn({ line, error }, 'Failed to parse line');
       }
     }
 

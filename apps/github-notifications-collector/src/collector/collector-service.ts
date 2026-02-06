@@ -24,7 +24,7 @@ export interface CollectorConfig {
  * 5. Обновляет состояние коллектора
  */
 export class CollectorService {
-  private readonly parser = new GhNotifyParser();
+  private readonly parser: GhNotifyParser;
   private readonly processor = new NotificationProcessor();
   private readonly notificationRepo = new NotificationRepository();
   private readonly outboxRepo = new OutboxRepository();
@@ -35,6 +35,7 @@ export class CollectorService {
     private readonly config: CollectorConfig,
     private readonly logger: Logger
   ) {
+    this.parser = new GhNotifyParser(logger);
     this.outboxPublisher = new OutboxPublisher(this.outboxRepo, logger);
   }
 
