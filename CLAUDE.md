@@ -210,10 +210,13 @@ See `.env.example` for complete list.
 
 ## Git Worktrees
 
-New feature/fix tasks should be done in an isolated git worktree:
-- Worktree directory: `.worktrees/` (project-local, in .gitignore)
-- Create: `git worktree add .worktrees/<branch-name> -b <branch-name>`
-- After creation: `cd .worktrees/<branch-name> && pnpm install && pnpm build`
+**Use `/using-git-worktrees` skill for guided setup.**
+
+New features/fixes require isolated worktree in `.worktrees/`:
+- **Create:** `git worktree add .worktrees/<branch-name> -b <branch-name>`
+- **Initialize:** `cd .worktrees/<branch-name> && pnpm install && pnpm build`
+- **Infrastructure:** Run `docker-compose up -d` from main directory (shared across worktrees)
+- **Development:** Execute all scripts (dev, test, build) from worktree directory
 
 ## Common Gotchas
 

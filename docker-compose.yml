@@ -72,7 +72,6 @@ services:
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/gh_automation
       PROCESSOR_INTERVAL_MS: ${PROCESSOR_INTERVAL_MS:-1000}
       BATCH_SIZE: ${BATCH_SIZE:-100}
-      MAX_RETRIES: ${MAX_RETRIES:-5}
       LOG_LEVEL: ${LOG_LEVEL:-info}
     restart: unless-stopped
     networks:
