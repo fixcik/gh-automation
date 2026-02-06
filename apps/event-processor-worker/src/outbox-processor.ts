@@ -86,31 +86,20 @@ export class OutboxProcessor {
     }
   }
 
-  /**
-   * "Публикует" событие
-   * В MVP просто логируем, в production - отправка в webhook/Redis/etc
-   */
   private async publishEvent(event: OutboxEvent): Promise<void> {
-    this.logger.info(
-      {
-        eventId: event.eventId,
-        eventType: event.eventType,
-        aggregateType: event.aggregateType,
-        aggregateId: event.aggregateId,
-        payload: event.payload,
-        metadata: event.metadata,
-      },
-      'EVENT PUBLISHED (MVP: logged only)'
-    );
-
-    // Simulate async publishing
-    await new Promise((resolve) => setTimeout(resolve, 10));
-
-    // В production здесь будет:
-    // - HTTP POST на webhook
-    // - Redis PUBLISH
-    // - Kafka produce
-    // etc.
+    if (this.publisher) {
+      const publishableEvent = OutboxProcessor.mapToPublishableEvent(event);
+      await this.publisher.publish(publishableEvent);
+    } else {
+      this.logger.info(
+        {
+          eventId: event.eventId,
+          eventType: event.eventType,
+          aggregateId: event.aggregateId,
+        },
+        'EVENT PUBLISHED (log-only mode: no publisher configured)'
+      );
+    }
   }
 
   private async handleError(event: OutboxEvent, error: Error): Promise<void> {
