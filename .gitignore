@@ -37,3 +37,6 @@ pnpm-debug.log*
 .vscode
 .idea
 *.iml
+
+# Development tools
+.serena
