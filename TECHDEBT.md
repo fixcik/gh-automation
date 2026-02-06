@@ -33,6 +33,7 @@
 Ошибки публикации результата в `JobExecutor.publishResult()` только логируются (fire-and-forget подход).
 
 **Текущее поведение:**
+
 ```typescript
 await this.publishResult(request, errorResult);
 // Если publisher.publish завершается с ошибкой, результат не будет доставлен
