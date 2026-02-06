@@ -25,18 +25,19 @@ export interface CollectorConfig {
  */
 export class CollectorService {
   private readonly parser: GhNotifyParser;
-  private readonly processor = new NotificationProcessor();
-  private readonly notificationRepo = new NotificationRepository();
-  private readonly outboxRepo = new OutboxRepository();
-  private readonly stateRepo = new CollectorStateRepository();
+  private readonly processor: NotificationProcessor;
   private readonly outboxPublisher: OutboxPublisher;
 
   constructor(
     private readonly config: CollectorConfig,
-    private readonly logger: Logger
+    private readonly logger: Logger,
+    private readonly notificationRepo = new NotificationRepository(),
+    private readonly stateRepo = new CollectorStateRepository(),
+    outboxRepo = new OutboxRepository()
   ) {
     this.parser = new GhNotifyParser(logger);
-    this.outboxPublisher = new OutboxPublisher(this.outboxRepo, logger);
+    this.processor = new NotificationProcessor();
+    this.outboxPublisher = new OutboxPublisher(outboxRepo, logger);
   }
 
   async collect(): Promise<void> {
