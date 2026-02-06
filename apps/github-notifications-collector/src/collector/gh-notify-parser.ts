@@ -59,6 +59,7 @@ export class GhNotifyParser {
 
     const [, readSymbol, timeAgo, repository, subjectType, numberStr, reason, title] = match;
 
+    // Space or empty = read notification (gh notify shows no icon for read items in colored output)
     const read = readSymbol.trim() === '✓' || readSymbol.trim() === '';
     const subjectNumber = numberStr ? parseInt(numberStr, 10) : null;
     const updatedAt = this.parseTimeAgo(timeAgo);
