@@ -22,7 +22,11 @@ export class CollectorStateRepository {
       .returning();
 
     if (!state) {
-      return (await this.get(tx))!;
+      const existing = await this.get(tx);
+      if (!existing) {
+        throw new Error('Failed to initialize collector state: row not found after conflict');
+      }
+      return existing;
     }
 
     return state;
