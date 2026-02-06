@@ -33,6 +33,12 @@ export class CollectorStateRepository {
     tx?: DbTransaction
   ): Promise<CollectorState> {
     const client = tx || db;
+    const current = await this.get(tx);
+
+    if (!current) {
+      await this.initialize(tx);
+    }
+
     const [state] = await client
       .update(collectorState)
       .set({
