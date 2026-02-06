@@ -1,5 +1,6 @@
 import { closeDatabase } from '@gh-automation/database';
 import { createLogger } from '@gh-automation/logger';
+import { closeNatsConnection, createNatsPublisher, getNatsConnection } from '@gh-automation/nats';
 import { OutboxProcessor } from './outbox-processor.js';
 
 const logger = createLogger('event-processor-worker', '0.0.1');
@@ -21,24 +22,37 @@ const config = {
     1000,
     'PROCESSOR_INTERVAL_MS'
   ),
+  natsUrl: process.env.NATS_URL || '',
 };
 
 logger.info({ config }, 'Starting Event Processor Worker');
 
-// Create processor
-const processor = new OutboxProcessor(
-  {
-    batchSize: config.batchSize,
-    processingIntervalMs: config.processingIntervalMs,
-  },
-  logger
-);
+// Create processor with optional NATS publisher
+const initializeProcessor = async (): Promise<OutboxProcessor> => {
+  if (!config.natsUrl) {
+    logger.warn('NATS_URL not set — running in log-only mode');
+    return new OutboxProcessor(
+      { batchSize: config.batchSize, processingIntervalMs: config.processingIntervalMs },
+      logger
+    );
+  }
+
+  const nc = await getNatsConnection({ url: config.natsUrl }, logger);
+  const publisher = await createNatsPublisher(nc, logger);
+  logger.info('NATS publisher initialized');
+
+  return new OutboxProcessor(
+    { batchSize: config.batchSize, processingIntervalMs: config.processingIntervalMs },
+    logger,
+    publisher
+  );
+};
 
 // Polling loop
 let isShuttingDown = false;
 let inFlight: Promise<void> | null = null;
 
-const runLoop = async () => {
+const runLoop = async (processor: OutboxProcessor) => {
   while (!isShuttingDown) {
     try {
       inFlight = processor.processNextBatch();
@@ -69,6 +83,7 @@ const shutdown = async (signal: string) => {
     await timeout;
   }
 
+  await closeNatsConnection(logger);
   await closeDatabase();
 
   logger.info('Shutdown complete');
@@ -78,10 +93,13 @@ const shutdown = async (signal: string) => {
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));
 
-// Start loop
-runLoop().catch((error) => {
-  logger.error({ error }, 'Fatal error');
-  process.exit(1);
-});
-
-logger.info('Worker started successfully');
+// Initialize and start
+initializeProcessor()
+  .then((processor) => {
+    logger.info('Worker started successfully');
+    return runLoop(processor);
+  })
+  .catch((error) => {
+    logger.error({ error }, 'Fatal error during initialization');
+    process.exit(1);
+  });
