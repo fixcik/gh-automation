@@ -14,16 +14,25 @@
     "format": "biome format --write .",
     "check": "biome check --write .",
     "test": "turbo run test",
+    "prepare": "simple-git-hooks",
     "infra": "docker-compose up -d postgres",
     "infra:migrate": "docker-compose up -d postgres && docker-compose up migrate",
     "infra:down": "docker-compose down",
     "db:migrate": "turbo run db:migrate",
     "clean": "turbo run clean && rm -rf node_modules"
   },
+  "simple-git-hooks": {
+    "pre-commit": "pnpm nano-staged"
+  },
+  "nano-staged": {
+    "*.{ts,js,json,md}": "biome check --write --no-errors-on-unmatched --files-ignore-unknown=true"
+  },
   "devDependencies": {
     "@biomejs/biome": "^2.3.14",
     "@types/node": "^20.11.19",
+    "nano-staged": "^0.9.0",
     "prettier": "^3.2.5",
+    "simple-git-hooks": "^2.13.1",
     "turbo": "^2.0.0",
     "typescript": "^5.3.3"
   }
