@@ -83,8 +83,17 @@ const shutdown = async (signal: string) => {
     await timeout;
   }
 
-  await closeNatsConnection(logger);
-  await closeDatabase();
+  try {
+    await closeNatsConnection(logger);
+  } catch (error) {
+    logger.warn({ error }, 'Failed to close NATS connection');
+  }
+
+  try {
+    await closeDatabase();
+  } catch (error) {
+    logger.error({ error }, 'Failed to close database');
+  }
 
   logger.info('Shutdown complete');
   process.exit(0);

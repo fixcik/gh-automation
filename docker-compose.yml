@@ -29,6 +29,11 @@ services:
       - "8222:8222"
     volumes:
       - nats_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8222/healthz || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
     networks:
       - gh-automation
 
@@ -81,7 +86,7 @@ services:
       migrate:
         condition: service_completed_successfully
       nats:
-        condition: service_started
+        condition: service_healthy
     environment:
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/gh_automation
       NATS_URL: nats://nats:4222
