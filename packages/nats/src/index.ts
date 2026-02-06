@@ -9,9 +9,8 @@ export {
   CLAUDE_JOBS_STREAM_NAME,
   CLAUDE_JOBS_STREAM_SUBJECTS,
   GITHUB_EVENTS_STREAM_CONFIG,
-  STREAM_CONFIG,
-  STREAM_NAME,
-  STREAM_SUBJECTS,
+  GITHUB_EVENTS_STREAM_NAME,
+  GITHUB_EVENTS_STREAM_SUBJECTS,
 } from './stream-config.js';
 export type { SubscriberConfig } from './subscriber.js';
 export { NatsSubscriber } from './subscriber.js';

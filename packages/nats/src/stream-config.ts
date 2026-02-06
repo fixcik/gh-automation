@@ -11,22 +11,19 @@ export interface StreamConfig {
   num_replicas: number;
 }
 
-// --- GITHUB_EVENTS (default, backward-compatible) ---
+// --- GITHUB_EVENTS ---
 
-export const STREAM_NAME = 'GITHUB_EVENTS';
-export const STREAM_SUBJECTS = ['github.notification.>'];
+export const GITHUB_EVENTS_STREAM_NAME = 'GITHUB_EVENTS';
+export const GITHUB_EVENTS_STREAM_SUBJECTS = ['github.notification.>'];
 
-export const STREAM_CONFIG: StreamConfig = {
-  name: STREAM_NAME,
-  subjects: STREAM_SUBJECTS,
-  max_age: nanos(7 * 24 * 60 * 60 * 1_000), // 7 days in milliseconds
+export const GITHUB_EVENTS_STREAM_CONFIG: StreamConfig = {
+  name: GITHUB_EVENTS_STREAM_NAME,
+  subjects: GITHUB_EVENTS_STREAM_SUBJECTS,
+  max_age: nanos(7 * 24 * 60 * 60 * 1_000),
   max_msgs: 100_000,
   storage: 'file',
   num_replicas: 1,
 };
-
-// Alias for explicit usage
-export const GITHUB_EVENTS_STREAM_CONFIG = STREAM_CONFIG;
 
 // --- CLAUDE_JOBS ---
 
