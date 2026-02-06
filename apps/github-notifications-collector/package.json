@@ -1,0 +1,29 @@
+{
+  "name": "@gh-automation/github-notifications-collector",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "clean": "rm -rf dist",
+    "test": "vitest"
+  },
+  "dependencies": {
+    "@gh-automation/database": "workspace:*",
+    "@gh-automation/shared-types": "workspace:*",
+    "@gh-automation/logger": "workspace:*",
+    "execa": "^8.0.1",
+    "node-cron": "^3.0.3"
+  },
+  "devDependencies": {
+    "@gh-automation/typescript-config": "workspace:*",
+    "@types/node": "^20.11.19",
+    "@types/node-cron": "^3.0.11",
+    "tsx": "^4.7.1",
+    "typescript": "^5.3.3",
+    "vitest": "^1.2.2"
+  }
+}

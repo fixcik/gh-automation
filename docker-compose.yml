@@ -1,0 +1,86 @@
+version: '3.9'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: gh-automation-db
+    environment:
+      POSTGRES_DB: gh_automation
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - gh-automation
+
+  # Migration runner - runs once and exits
+  migrate:
+    build:
+      context: .
+      dockerfile: apps/github-notifications-collector/Dockerfile
+      target: builder
+    container_name: gh-automation-migrate
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/gh_automation
+    command: sh -c "cd /app/packages/database && pnpm db:migrate"
+    networks:
+      - gh-automation
+
+  collector:
+    build:
+      context: .
+      dockerfile: apps/github-notifications-collector/Dockerfile
+    container_name: gh-notifications-collector
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/gh_automation
+      GH_TOKEN: ${GH_TOKEN}
+      COLLECTOR_SCHEDULE: ${COLLECTOR_SCHEDULE:-*/5 * * * *}
+      GH_NOTIFY_LIMIT: ${GH_NOTIFY_LIMIT:-100}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    volumes:
+      - ~/.config/gh:/root/.config/gh:ro
+    restart: unless-stopped
+    networks:
+      - gh-automation
+
+  processor:
+    build:
+      context: .
+      dockerfile: apps/event-processor-worker/Dockerfile
+    container_name: outbox-processor
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/gh_automation
+      PROCESSOR_INTERVAL_MS: ${PROCESSOR_INTERVAL_MS:-1000}
+      BATCH_SIZE: ${BATCH_SIZE:-100}
+      MAX_RETRIES: ${MAX_RETRIES:-5}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    restart: unless-stopped
+    networks:
+      - gh-automation
+
+volumes:
+  postgres_data:
+
+networks:
+  gh-automation:
+    driver: bridge

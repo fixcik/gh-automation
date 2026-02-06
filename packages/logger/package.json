@@ -1,0 +1,19 @@
+{
+  "name": "@gh-automation/logger",
+  "version": "0.0.1",
+  "private": true,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "pino": "^8.19.0",
+    "pino-pretty": "^10.3.1"
+  },
+  "devDependencies": {
+    "@gh-automation/typescript-config": "workspace:*",
+    "typescript": "^5.3.3"
+  }
+}

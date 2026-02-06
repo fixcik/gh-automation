@@ -1,0 +1,26 @@
+{
+  "name": "@gh-automation/database",
+  "version": "0.0.1",
+  "private": true,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx src/migrate.ts",
+    "db:studio": "drizzle-kit studio"
+  },
+  "dependencies": {
+    "@gh-automation/shared-types": "workspace:*",
+    "drizzle-orm": "^0.36.4",
+    "postgres": "^3.4.4"
+  },
+  "devDependencies": {
+    "@gh-automation/typescript-config": "workspace:*",
+    "@types/node": "^20.11.19",
+    "drizzle-kit": "^0.28.1",
+    "tsx": "^4.7.1",
+    "typescript": "^5.3.3"
+  }
+}
