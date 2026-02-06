@@ -183,6 +183,8 @@ This is invalid line
       expect(result).toHaveLength(2);
       expect(result[0].repository).toBe('owner/repo1');
       expect(result[1].repository).toBe('owner/repo2');
+      expect(result[0].read).toBe(false); // ● symbol
+      expect(result[1].read).toBe(true); // space symbol (read)
     });
   });
 });
