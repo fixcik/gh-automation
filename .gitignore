@@ -11,9 +11,8 @@ dist
 build
 
 # Environment
-.env
-.env.local
-.env.production
+.env*
+!.env.example
 
 # Logs
 logs
@@ -40,3 +39,6 @@ pnpm-debug.log*
 
 # Development tools
 .serena
+
+# Git worktrees
+.worktrees
