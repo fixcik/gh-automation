@@ -1,6 +1,6 @@
 import type { Logger } from '@gh-automation/logger';
 import type { JetStreamClient, JetStreamManager } from '@nats-io/jetstream';
-import { STREAM_CONFIG, STREAM_NAME } from './stream-config.js';
+import { STREAM_CONFIG, type StreamConfig } from './stream-config.js';
 
 export interface PublishableEvent {
   eventId: string;
@@ -12,19 +12,23 @@ export interface PublishableEvent {
 
 export class NatsPublisher {
   private streamEnsured = false;
+  private readonly streamConfig: StreamConfig;
 
   constructor(
     private readonly js: JetStreamClient,
     private readonly jsm: JetStreamManager,
-    private readonly logger: Logger
-  ) {}
+    private readonly logger: Logger,
+    streamConfig?: StreamConfig
+  ) {
+    this.streamConfig = streamConfig ?? STREAM_CONFIG;
+  }
 
   async ensureStream(): Promise<void> {
     if (this.streamEnsured) return;
 
     try {
-      await this.jsm.streams.info(STREAM_NAME);
-      this.logger.info({ stream: STREAM_NAME }, 'Stream already exists');
+      await this.jsm.streams.info(this.streamConfig.name);
+      this.logger.info({ stream: this.streamConfig.name }, 'Stream already exists');
     } catch (err) {
       const isNotFound =
         err instanceof Error &&
@@ -32,9 +36,9 @@ export class NatsPublisher {
       if (!isNotFound) {
         throw err;
       }
-      this.logger.info({ stream: STREAM_NAME }, 'Creating stream');
-      await this.jsm.streams.add(STREAM_CONFIG);
-      this.logger.info({ stream: STREAM_NAME }, 'Stream created');
+      this.logger.info({ stream: this.streamConfig.name }, 'Creating stream');
+      await this.jsm.streams.add(this.streamConfig);
+      this.logger.info({ stream: this.streamConfig.name }, 'Stream created');
     }
 
     this.streamEnsured = true;

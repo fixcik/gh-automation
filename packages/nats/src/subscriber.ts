@@ -22,17 +22,22 @@ const DEFAULT_CONFIG: Required<SubscriberConfig> = {
 };
 
 export class NatsSubscriber {
+  private readonly streamName: string;
+
   constructor(
     private readonly js: JetStreamClient,
     private readonly jsm: JetStreamManager,
-    private readonly logger: Logger
-  ) {}
+    private readonly logger: Logger,
+    streamName?: string
+  ) {
+    this.streamName = streamName ?? STREAM_NAME;
+  }
 
   async ensureConsumer(consumerName: string, config?: SubscriberConfig): Promise<void> {
     const opts = { ...DEFAULT_CONFIG, ...config };
 
     try {
-      await this.jsm.consumers.info(STREAM_NAME, consumerName);
+      await this.jsm.consumers.info(this.streamName, consumerName);
       this.logger.info({ consumer: consumerName }, 'Consumer already exists');
     } catch (err) {
       const isNotFound =
@@ -56,12 +61,12 @@ export class NatsSubscriber {
         consumerConfig.filter_subject = opts.filterSubject;
       }
 
-      await this.jsm.consumers.add(STREAM_NAME, consumerConfig);
+      await this.jsm.consumers.add(this.streamName, consumerConfig);
       this.logger.info({ consumer: consumerName }, 'Consumer created');
     }
   }
 
   async getConsumer(consumerName: string): Promise<Consumer> {
-    return this.js.consumers.get(STREAM_NAME, consumerName);
+    return this.js.consumers.get(this.streamName, consumerName);
   }
 }
