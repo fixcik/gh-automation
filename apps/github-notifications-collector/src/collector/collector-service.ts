@@ -101,6 +101,7 @@ export class CollectorService {
     this.logger.debug({ args }, 'Executing gh notify');
 
     const { stdout } = await execa('gh', args, {
+      timeout: 60_000, // 60s timeout to prevent indefinite hang
       env: {
         ...process.env,
         ...(this.config.ghToken && { GH_TOKEN: this.config.ghToken }),
