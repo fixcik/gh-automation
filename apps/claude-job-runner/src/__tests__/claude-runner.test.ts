@@ -79,7 +79,9 @@ describe('ClaudeRunner', () => {
   });
 
   it('should handle timeout gracefully', async () => {
-    mockExeca.mockRejectedValue(new Error('timed out after 5000 milliseconds'));
+    const timeoutError = new Error('timed out after 5000 milliseconds');
+    (timeoutError as any).timedOut = true;
+    mockExeca.mockRejectedValue(timeoutError);
 
     const result = await runner.run('prompt', '/tmp/clone', ['-p'], 5000);
 

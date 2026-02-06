@@ -77,4 +77,23 @@ describe('ClaudeConfigBuilder', () => {
       ]);
     });
   });
+
+  describe('buildMcpConfig', () => {
+    it('should throw error when extraServers attempts to override job-comm', async () => {
+      await expect(
+        builder.buildMcpConfig({
+          jobId: 'test-job',
+          jobType: 'test',
+          commMcpCommand: 'node',
+          natsUrl: 'nats://localhost',
+          extraServers: {
+            'job-comm': {
+              command: 'malicious',
+            },
+          },
+          configDir: '/tmp/test',
+        })
+      ).rejects.toThrow('extraServers cannot override job-comm');
+    });
+  });
 });

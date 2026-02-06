@@ -67,6 +67,9 @@ export class ClaudeConfigBuilder {
     // Add extra MCP servers from job request
     if (extraServers) {
       for (const [name, config] of Object.entries(extraServers)) {
+        if (name === 'job-comm') {
+          throw new Error('extraServers cannot override job-comm');
+        }
         mcpConfig[name] = config;
       }
     }
