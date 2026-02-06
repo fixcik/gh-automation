@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NatsPublisher } from '../publisher.js';
+import { STREAM_CONFIG } from '../stream-config.js';
 
 // Mock NATS objects
 function createMockJs() {
@@ -36,7 +37,7 @@ describe('NatsPublisher', () => {
     mockJs = createMockJs();
     mockJsm = createMockJsm();
     mockLogger = createMockLogger();
-    publisher = new NatsPublisher(mockJs as any, mockJsm as any, mockLogger);
+    publisher = new NatsPublisher(mockJs as any, mockJsm as any, mockLogger, STREAM_CONFIG);
   });
 
   it('should publish event to correct subject', async () => {
@@ -143,11 +144,5 @@ describe('NatsPublisher with custom stream config', () => {
     mockJsm.streams.info.mockRejectedValueOnce(new Error('stream not found'));
     await publisher.ensureStream();
     expect(mockJsm.streams.add).toHaveBeenCalledWith(customStreamConfig);
-  });
-
-  it('should use default GITHUB_EVENTS when no config provided', async () => {
-    const defaultPublisher = new NatsPublisher(mockJs as any, mockJsm as any, mockLogger);
-    await defaultPublisher.ensureStream();
-    expect(mockJsm.streams.info).toHaveBeenCalledWith('GITHUB_EVENTS');
   });
 });

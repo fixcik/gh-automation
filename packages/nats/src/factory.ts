@@ -8,7 +8,7 @@ import { NatsSubscriber } from './subscriber.js';
 export async function createNatsPublisher(
   nc: NatsConnection,
   logger: Logger,
-  streamConfig?: StreamConfig
+  streamConfig: StreamConfig
 ): Promise<NatsPublisher> {
   const js = jetstream(nc);
   const jsm = await jetstreamManager(nc);
@@ -20,7 +20,7 @@ export async function createNatsPublisher(
 export async function createNatsSubscriber(
   nc: NatsConnection,
   logger: Logger,
-  streamName?: string
+  streamName: string
 ): Promise<NatsSubscriber> {
   const js = jetstream(nc);
   const jsm = await jetstreamManager(nc);

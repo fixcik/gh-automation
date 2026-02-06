@@ -7,8 +7,6 @@ import {
   type JetStreamClient,
   type JetStreamManager,
 } from '@nats-io/jetstream';
-import { STREAM_NAME } from './stream-config.js';
-
 export interface SubscriberConfig {
   maxAckPending?: number;
   ackWaitMs?: number;
@@ -22,16 +20,12 @@ const DEFAULT_CONFIG: Required<SubscriberConfig> = {
 };
 
 export class NatsSubscriber {
-  private readonly streamName: string;
-
   constructor(
     private readonly js: JetStreamClient,
     private readonly jsm: JetStreamManager,
     private readonly logger: Logger,
-    streamName?: string
-  ) {
-    this.streamName = streamName ?? STREAM_NAME;
-  }
+    private readonly streamName: string
+  ) {}
 
   async ensureConsumer(consumerName: string, config?: SubscriberConfig): Promise<void> {
     const opts = { ...DEFAULT_CONFIG, ...config };

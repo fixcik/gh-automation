@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { STREAM_NAME } from '../stream-config.js';
 import { NatsSubscriber } from '../subscriber.js';
 
 function createMockConsumer() {
@@ -49,7 +50,7 @@ describe('NatsSubscriber', () => {
     mockJs = createMockJs();
     mockJsm = createMockJsm();
     mockLogger = createMockLogger();
-    subscriber = new NatsSubscriber(mockJs as any, mockJsm as any, mockLogger);
+    subscriber = new NatsSubscriber(mockJs as any, mockJsm as any, mockLogger, STREAM_NAME);
   });
 
   it('should ensure consumer exists before subscribing', async () => {
@@ -116,11 +117,5 @@ describe('NatsSubscriber with custom stream name', () => {
   it('should use custom stream name for getConsumer', async () => {
     await subscriber.getConsumer('job-runner');
     expect(mockJs.consumers.get).toHaveBeenCalledWith('CLAUDE_JOBS', 'job-runner');
-  });
-
-  it('should use default GITHUB_EVENTS when no name provided', async () => {
-    const defaultSubscriber = new NatsSubscriber(mockJs as any, mockJsm as any, mockLogger);
-    await defaultSubscriber.ensureConsumer('my-service');
-    expect(mockJsm.consumers.info).toHaveBeenCalledWith('GITHUB_EVENTS', 'my-service');
   });
 });
