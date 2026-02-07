@@ -31,19 +31,13 @@ export class JobExecutor {
     this.natsUrl = deps.natsUrl;
   }
 
-  private getAggregateId(metadata: ClaudeJobRequest['metadata']): string {
-    return `${metadata.repository}:${metadata.prNumber}`;
-  }
-
   /**
    * Executes a complete job pipeline:
    * 1. Clone repo
-   * 2. Restore cache
-   * 3. Build Claude CLI args + MCP config
-   * 4. Run Claude
-   * 5. Save cache
-   * 6. Publish result to NATS
-   * 7. Cleanup clone (always)
+   * 2. Build Claude CLI args + MCP config
+   * 3. Run Claude
+   * 4. Publish result to NATS
+   * 5. Cleanup clone (always)
    */
   async execute(request: ClaudeJobRequest): Promise<ClaudeJobResult> {
     const startedAt = new Date().toISOString();
@@ -54,41 +48,29 @@ export class JobExecutor {
       // 1. Clone
       clonePath = await this.cloneManager.clone(request.jobId, request.repository);
 
-      // 2. Restore cache
-      if (request.cache?.paths?.length) {
-        const aggregateId = this.getAggregateId(request.metadata);
-        await this.cloneManager.restoreCache(clonePath, aggregateId, request.cache.paths);
-      }
-
-      // 3. Build config
+      // 2. Build config
       const args = this.configBuilder.buildArgs(request.claude);
 
-      if (request.communication.enableNotifications || request.communication.enableAskUser) {
+      if (request.tools && request.tools.length > 0) {
         await this.configBuilder.buildMcpConfig({
           jobId: request.jobId,
-          jobType: request.jobType,
-          commMcpCommand: 'node',
-          commMcpArgs: ['/app/apps/claude-job-runner/dist/mcp-server/index.js'],
+          tools: request.tools,
+          bridgeCommand: 'node',
+          bridgeArgs: ['/app/apps/claude-job-runner/dist/mcp-bridge/index.js'],
           natsUrl: this.natsUrl,
           extraServers: request.claude.mcpServers,
           configDir: clonePath,
         });
       }
 
-      // 4. Run Claude
+      // 3. Run Claude
       const timeoutMs = request.claude.timeoutMs ?? 600_000;
       const claudeResult = await this.claudeRunner.run(request.prompt, clonePath, args, timeoutMs);
 
-      // 5. Save cache
-      if (request.cache?.paths?.length && clonePath) {
-        const aggregateId = this.getAggregateId(request.metadata);
-        await this.cloneManager.saveCache(clonePath, aggregateId, request.cache.paths);
-      }
-
-      // 6. Build result
+      // 4. Build result
       const result = this.buildResult(request, claudeResult, startedAt, startTime);
 
-      // 7. Publish result
+      // 5. Publish result
       await this.publishResult(request, result);
 
       return result;
@@ -100,7 +82,7 @@ export class JobExecutor {
 
       return errorResult;
     } finally {
-      // 8. Cleanup
+      // 6. Cleanup
       if (clonePath) {
         await this.cloneManager.cleanup(clonePath);
       }

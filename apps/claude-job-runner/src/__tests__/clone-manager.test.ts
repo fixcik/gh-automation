@@ -17,7 +17,7 @@ describe('CloneManager', () => {
 
   beforeEach(() => {
     logger = createMockLogger();
-    manager = new CloneManager('/tmp/clone', '/data/cache', logger as any);
+    manager = new CloneManager('/tmp/clone', logger as any);
   });
 
   describe('getClonePath', () => {
@@ -85,16 +85,6 @@ describe('CloneManager', () => {
         'https://github.com/owner/repo.git',
         '/tmp/clone/job-1',
       ]);
-    });
-  });
-
-  describe('getCachePath', () => {
-    it('should sanitize aggregateId for filesystem path', () => {
-      expect(manager.getCachePath('owner/repo:42')).toBe('/data/cache/owner_repo_42');
-    });
-
-    it('should handle aggregateId without special chars', () => {
-      expect(manager.getCachePath('simple-key')).toBe('/data/cache/simple-key');
     });
   });
 });

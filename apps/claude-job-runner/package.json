@@ -18,6 +18,8 @@
     "@gh-automation/logger": "workspace:*",
     "@gh-automation/nats": "workspace:*",
     "@gh-automation/shared-types": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.26.0",
+    "@nats-io/transport-node": "^3.0.0",
     "execa": "^9.5.2"
   },
   "devDependencies": {

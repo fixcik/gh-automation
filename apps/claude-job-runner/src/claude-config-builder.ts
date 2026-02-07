@@ -1,12 +1,18 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { ClaudeJobRequest, McpServerConfig } from '@gh-automation/shared-types';
+import type { McpServerConfig, ToolDefinition } from '@gh-automation/shared-types';
 
 export class ClaudeConfigBuilder {
   /**
    * Builds CLI arguments for `claude -p` from job request config.
    */
-  buildArgs(config: ClaudeJobRequest['claude']): string[] {
+  buildArgs(config: {
+    model?: string;
+    maxTurns?: number;
+    maxBudgetUsd?: number;
+    allowedTools?: string[];
+    permissionMode?: string;
+  }): string[] {
     const args: string[] = ['-p', '--output-format', 'json'];
 
     if (config.model) {
@@ -34,41 +40,40 @@ export class ClaudeConfigBuilder {
 
   /**
    * Generates a temporary MCP config JSON file for the Claude session.
-   * Includes the job-comm MCP server (for send_notification, ask_user, etc.)
+   * Includes the job-bridge MCP server (generic NATS tool proxy)
    * plus any extra MCP servers from the job request.
    *
    * Returns the path to the generated config file.
    */
   async buildMcpConfig(options: {
     jobId: string;
-    jobType: string;
-    commMcpCommand: string;
-    commMcpArgs?: string[];
+    tools: ToolDefinition[];
+    bridgeCommand: string;
+    bridgeArgs?: string[];
     natsUrl: string;
     extraServers?: Record<string, McpServerConfig>;
     configDir: string;
   }): Promise<string> {
-    const { jobId, jobType, commMcpCommand, commMcpArgs, natsUrl, extraServers, configDir } =
-      options;
+    const { jobId, tools, bridgeCommand, bridgeArgs, natsUrl, extraServers, configDir } = options;
 
     const mcpConfig: Record<string, McpServerConfig> = {};
 
-    // Add comm MCP server (notification, ask_user, progress)
-    mcpConfig['job-comm'] = {
-      command: commMcpCommand,
-      args: commMcpArgs,
+    // Add job-bridge MCP server (generic NATS tool proxy)
+    mcpConfig['job-bridge'] = {
+      command: bridgeCommand,
+      args: bridgeArgs,
       env: {
         NATS_URL: natsUrl,
         JOB_ID: jobId,
-        JOB_TYPE: jobType,
+        TOOL_DEFINITIONS: JSON.stringify(tools),
       },
     };
 
     // Add extra MCP servers from job request
     if (extraServers) {
       for (const [name, config] of Object.entries(extraServers)) {
-        if (name === 'job-comm') {
-          throw new Error('extraServers cannot override job-comm');
+        if (name === 'job-bridge') {
+          throw new Error('extraServers cannot override job-bridge');
         }
         mcpConfig[name] = config;
       }

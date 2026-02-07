@@ -5,7 +5,6 @@ export interface RunnerConfig {
   consumerName: string;
   ackWaitMs: number;
   cloneBaseDir: string;
-  cacheBaseDir: string;
   logLevel: string;
   maxConcurrentJobs: number;
 }
@@ -35,7 +34,6 @@ export function loadConfig(logger: Logger): RunnerConfig {
     consumerName: process.env.NATS_CONSUMER_NAME || 'claude-job-runner',
     ackWaitMs: parsePositiveInt(process.env.NATS_ACK_WAIT_MS, 900_000, 'NATS_ACK_WAIT_MS', logger),
     cloneBaseDir: process.env.CLONE_BASE_DIR || '/tmp/claude-jobs',
-    cacheBaseDir: process.env.CACHE_BASE_DIR || '/data/cache',
     logLevel: process.env.LOG_LEVEL || 'info',
     maxConcurrentJobs: parsePositiveInt(
       process.env.MAX_CONCURRENT_JOBS,

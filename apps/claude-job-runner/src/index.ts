@@ -29,7 +29,7 @@ const initialize = async () => {
   const publisher = await createNatsPublisher(nc, logger, CLAUDE_JOBS_STREAM_CONFIG);
   const subscriber = await createNatsSubscriber(nc, logger, CLAUDE_JOBS_STREAM_NAME);
 
-  const cloneManager = new CloneManager(config.cloneBaseDir, config.cacheBaseDir, logger);
+  const cloneManager = new CloneManager(config.cloneBaseDir, logger);
   const claudeRunner = new ClaudeRunner(logger);
   const configBuilder = new ClaudeConfigBuilder();
 
