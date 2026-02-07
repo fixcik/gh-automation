@@ -33,7 +33,16 @@ async function main() {
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: args } = request.params;
     const toolDef = tools.find((t) => t.name === name);
-    const timeoutMs = toolDef?.timeoutMs ?? 30_000;
+
+    // Block unknown tools
+    if (!toolDef) {
+      return {
+        content: [{ type: 'text', text: `Unknown tool: ${name}` }],
+        isError: true,
+      } as unknown as Record<string, unknown>;
+    }
+
+    const timeoutMs = toolDef.timeoutMs ?? 30_000;
 
     const result = await proxy.callTool(name, (args ?? {}) as Record<string, unknown>, timeoutMs);
     // v1 ServerResult requires index signature - wire protocol compatible

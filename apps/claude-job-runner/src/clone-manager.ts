@@ -12,8 +12,13 @@ export class CloneManager {
 
   /**
    * Builds the clone directory path for a job.
+   * Validates jobId to prevent path traversal attacks.
    */
   getClonePath(jobId: string): string {
+    // Only allow alphanumeric, dash, underscore (RFC 4122 UUIDs + common formats)
+    if (!/^[a-zA-Z0-9_-]+$/.test(jobId)) {
+      throw new Error(`Invalid jobId format: ${jobId}`);
+    }
     return join(this.baseDir, `job-${jobId}`);
   }
 

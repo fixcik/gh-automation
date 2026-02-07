@@ -47,7 +47,17 @@ export class NatsToolProxy {
     timeoutMs = 30_000
   ): Promise<CallToolResult> {
     const subject = this.getSubject(toolName);
-    const payload = JSON.stringify(args);
+    let payload: string;
+
+    try {
+      payload = JSON.stringify(args);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return {
+        content: [{ type: 'text', text: `Failed to serialize tool arguments: ${message}` }],
+        isError: true,
+      };
+    }
 
     try {
       const response = await this.nc.request(subject, Buffer.from(payload), {
@@ -63,13 +73,23 @@ export class NatsToolProxy {
         };
       }
 
+      let resultText: string;
+      if (typeof data.result === 'string') {
+        resultText = data.result;
+      } else {
+        try {
+          resultText = JSON.stringify(data.result);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          return {
+            content: [{ type: 'text', text: `Failed to serialize tool result: ${message}` }],
+            isError: true,
+          };
+        }
+      }
+
       return {
-        content: [
-          {
-            type: 'text',
-            text: typeof data.result === 'string' ? data.result : JSON.stringify(data.result),
-          },
-        ],
+        content: [{ type: 'text', text: resultText }],
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

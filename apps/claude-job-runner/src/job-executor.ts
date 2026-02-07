@@ -51,10 +51,14 @@ export class JobExecutor {
       // 2. Build config
       const args = this.configBuilder.buildArgs(request.claude);
 
-      if (request.tools && request.tools.length > 0) {
+      const hasTools = request.tools && request.tools.length > 0;
+      const hasMcpServers =
+        request.claude.mcpServers && Object.keys(request.claude.mcpServers).length > 0;
+
+      if (hasTools || hasMcpServers) {
         await this.configBuilder.buildMcpConfig({
           jobId: request.jobId,
-          tools: request.tools,
+          tools: request.tools || [],
           bridgeCommand: 'node',
           bridgeArgs: ['/app/apps/claude-job-runner/dist/mcp-bridge/index.js'],
           natsUrl: this.natsUrl,

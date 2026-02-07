@@ -132,7 +132,7 @@ describe('JobExecutor', () => {
     expect(result.jobId).toBe('test-job-1');
   });
 
-  it('should not build MCP config when tools is empty', async () => {
+  it('should not build MCP config when tools is empty and no mcpServers', async () => {
     const request = createTestRequest({ tools: [] });
 
     await executor.execute(request);
@@ -140,12 +140,39 @@ describe('JobExecutor', () => {
     expect(mocks.configBuilder.buildMcpConfig).not.toHaveBeenCalled();
   });
 
-  it('should not build MCP config when tools is undefined', async () => {
+  it('should not build MCP config when tools is undefined and no mcpServers', async () => {
     const request = createTestRequest({ tools: undefined });
 
     await executor.execute(request);
 
     expect(mocks.configBuilder.buildMcpConfig).not.toHaveBeenCalled();
+  });
+
+  it('should build MCP config when tools is empty but mcpServers is defined', async () => {
+    const request = createTestRequest({
+      tools: [],
+      claude: {
+        model: 'sonnet',
+        mcpServers: {
+          'custom-server': {
+            command: 'node',
+            args: ['/path/to/server.js'],
+          },
+        },
+      },
+    });
+
+    await executor.execute(request);
+
+    expect(mocks.configBuilder.buildMcpConfig).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jobId: 'test-job-1',
+        tools: [],
+        extraServers: expect.objectContaining({
+          'custom-server': expect.any(Object),
+        }),
+      })
+    );
   });
 
   it('should return failed result when Claude exits with non-zero code', async () => {

@@ -138,6 +138,16 @@ describe('NatsToolProxy', () => {
         { timeout: 300_000 }
       );
     });
+
+    it('should handle JSON.stringify error for args with circular reference', async () => {
+      const circular: Record<string, unknown> = {};
+      circular.self = circular; // circular reference
+
+      const result = await proxy.callTool('send_notification', circular);
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('Failed to serialize tool arguments');
+    });
   });
 
   describe('shutdown', () => {
