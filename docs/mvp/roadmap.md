@@ -9,55 +9,196 @@
 
 **Ключевые решения из брейншторма:**
 - Разделение на 2 сервиса (generic runner + тонкий диспетчер)
-- MCP server для коммуникации Claude <-> внешний мир (send_notification, ask_user, report_progress)
+- **Generic MCP → NATS Bridge**: один универсальный MCP server, tools определяются динамически per-job через `ToolDefinition[]` в `ClaudeJobRequest`
+- **Handler-side data fetching**: комментарии из PR получаются на стороне `pr-review-handler` и передаются в промпте; ответы на комментарии — через MCP tool callbacks
+- **NATS request/reply** для синхронных tool calls (Claude → MCP → NATS request → Handler callback → NATS reply → MCP → Claude)
 - grammy для Telegram бота с inline keyboards и auth whitelist
 - `git clone` вместо worktree (в контейнере нет основного репо)
 - Claude CLI через `npm i -g @anthropic-ai/claude-code` + ANTHROPIC_API_KEY
-- Docker volume для кеша gh-pr-threads (`/data/cache/{owner}/{repo}/pr-{N}.json`)
-- Доступы Claude настраиваются per-job (tools, model, MCP servers)
+- Docker volume для кеша (`/data/cache/`)
+- Доступы Claude настраиваются per-job (tools, model, dynamic MCP tools)
 - Telegram approval flow перед обработкой PR (кнопки Да/Нет)
+- **Гарантированный cleanup callbacks**: NATS subscriptions привязаны к connection lifecycle + explicit unsubscribe per-job + TTL safety net
 ---
 
 ## Архитектура
 
+```mermaid
+graph LR
+    subgraph "Existing Pipeline"
+        C[collector] --> O[outbox + processor]
+        O --> GE[NATS: GITHUB_EVENTS]
+    end
+
+    subgraph "pr-review-handler"
+        GE --> PRH[Handler]
+        PRH -->|1. Filter PR event| PRH
+        PRH -->|2. Fetch comments| PRH
+        PRH -->|3. Telegram approve| TG[Telegram grammy]
+        PRH -->|4. Register callbacks| PRH
+        PRH -->|5. Dispatch job| CJ[NATS: CLAUDE_JOBS]
+    end
+
+    subgraph "claude-job-runner"
+        CJ -->|job request| R[Runner]
+        R -->|1. git clone| R
+        R -->|2. Generate MCP config| R
+        R -->|3. claude -p| CL[Claude CLI]
+        R -->|4. Result| CJ
+    end
+
+    subgraph "Generic MCP NATS Bridge"
+        CL <-->|stdio| MCP[MCP Server]
+        MCP <-->|"NATS request/reply<br/>claude.job.tool.{jobId}.{toolName}"| PRH
+    end
+
+    TG <-->|approval, ask_user, notifications| User[User]
 ```
-github.notification.>                claude.job.request.>           claude.job.result.>
-┌──────────┐   ┌──────────┐   ┌──────────────┐   ┌────────────────────┐   ┌──────────────────┐
-│ collector │──>│ outbox + │──>│ NATS:        │──>│ pr-review-handler  │──>│ NATS:            │
-│           │   │ processor│   │ GITHUB_EVENTS│   │                    │   │ CLAUDE_JOBS      │
-└──────────┘   └──────────┘   └──────────────┘   │ 1. Filter PR event │   └───────┬──────────┘
-                                                   │ 2. Telegram approve│           │
-                                                   │ 3. Dispatch job    │           v
-                                                   └────────┬───────────┘   ┌──────────────────┐
-                                                            │               │ claude-job-runner │
-                                                   ┌────────v───────────┐   │ 1. git clone     │
-                                                   │ Telegram (grammy)  │   │ 2. MCP server    │
-                                                   │ - Approval buttons │   │ 3. claude -p     │
-                                                   │ - Notifications    │   │ 4. Result -> NATS│
-                                                   │ - ask_user relay   │   └──────────────────┘
-                                                   │ - Auth whitelist   │
-                                                   └────────────────────┘
+
+### Generic MCP → NATS Bridge (ключевая архитектурная идея)
+
+MCP server — тонкий NATS proxy. Tools определяются **динамически** из `ClaudeJobRequest.tools[]`.
+
+```mermaid
+sequenceDiagram
+    participant H as pr-review-handler
+    participant NATS
+    participant R as claude-job-runner
+    participant MCP as Generic MCP<br/>(NATS Bridge)
+    participant CL as Claude CLI
+
+    H->>H: 1. Fetch PR comments (gh-pr-threads)
+    H->>H: 2. Register NATS callbacks per tool
+    H->>NATS: 3. Publish ClaudeJobRequest<br/>{tools: [reply_to_comment, send_notification, ask_user]}
+    NATS->>R: 4. Deliver job request
+    R->>R: 5. git clone
+    R->>R: 6. Generate MCP config from request.tools[]
+    R->>CL: 7. claude -p (with MCP config)
+    CL->>MCP: 8. Start MCP server (stdio)
+    MCP->>NATS: 9. Connect to NATS
+
+    loop Tool Calls
+        CL->>MCP: call reply_to_comment({threadId, message})
+        MCP->>NATS: request(claude.job.tool.{jobId}.reply_to_comment)
+        NATS->>H: deliver to callback
+        H->>H: gh-pr-threads reply
+        H->>NATS: respond({success: true})
+        NATS->>MCP: reply
+        MCP->>CL: return result
+    end
+
+    CL->>R: 10. Exit (success/fail)
+    R->>NATS: 11. Publish ClaudeJobResult
+    NATS->>H: 12. Deliver result
+    H->>H: 13. Cleanup callbacks for jobId
+    H->>NATS: 14. Unsubscribe tool callbacks
 ```
+
+**Handler регистрирует callbacks ДО dispatch'а job'а, снимает ПОСЛЕ получения результата.**
 
 ## NATS Subjects
 
-| Subject | Stream | Publisher | Consumer |
-|---------|--------|-----------|----------|
-| `github.notification.created` | GITHUB_EVENTS | event-processor-worker | pr-review-handler |
-| `github.notification.updated` | GITHUB_EVENTS | event-processor-worker | pr-review-handler |
-| `claude.job.request.pr-review` | CLAUDE_JOBS | pr-review-handler | claude-job-runner |
-| `claude.job.result.pr-review` | CLAUDE_JOBS | claude-job-runner | pr-review-handler |
-| `claude.job.outgoing.pr-review.<jobId>` | CLAUDE_JOBS | MCP server (Claude) | pr-review-handler |
-| `claude.job.incoming.pr-review.<jobId>` | CLAUDE_JOBS | pr-review-handler | MCP server (Claude) |
+| Subject | Pattern | Publisher | Consumer | Механизм |
+|---------|---------|-----------|----------|----------|
+| `github.notification.created` | JetStream | event-processor-worker | pr-review-handler | consume |
+| `github.notification.updated` | JetStream | event-processor-worker | pr-review-handler | consume |
+| `claude.job.request.pr-review` | JetStream | pr-review-handler | claude-job-runner | consume |
+| `claude.job.result.pr-review` | JetStream | claude-job-runner | pr-review-handler | consume |
+| `claude.job.tool.<jobId>.<toolName>` | **request/reply** | MCP server | pr-review-handler | `nc.request()` / `nc.subscribe()` |
+
+**Важно:** Tool calls используют NATS request/reply (не JetStream) — это синхронный паттерн, идеально подходит для tool calls где Claude ждёт ответа.
+
+## Callback Cleanup Guarantees
+
+Гарантированное снятие callbacks — критически важно. Три уровня защиты:
+
+```mermaid
+graph TB
+    subgraph "Level 1: NATS Connection Lifecycle (auto)"
+        CRASH[Handler crash/OOM] --> CONN_DIES[NATS connection closes]
+        CONN_DIES --> SUBS_DIE[All subscriptions removed]
+        SUBS_DIE --> MCP_TIMEOUT[MCP gets timeout on request]
+        MCP_TIMEOUT --> CLAUDE_ERR[Claude gets error]
+    end
+
+    subgraph "Level 2: Explicit Cleanup (primary)"
+        RESULT[Job result received] --> CLEANUP["cleanup(jobId)"]
+        CLEANUP --> UNSUB[Unsubscribe all job callbacks]
+        UNSUB --> DELETE[Delete from activeCallbacks map]
+        SHUTDOWN[SIGTERM/SIGINT] --> CLEANUP_ALL["cleanupAll()"]
+        CLEANUP_ALL --> UNSUB_ALL[Unsubscribe ALL callbacks]
+    end
+
+    subgraph "Level 3: TTL Safety Net"
+        REGISTER[Register callbacks] --> TIMER["setTimeout(JOB_TTL_MS)"]
+        TIMER --> CHECK{Job still active?}
+        CHECK -->|Yes| FORCE["Force cleanup(jobId)"]
+        CHECK -->|No| NOOP[Already cleaned up]
+    end
+```
+
+### CallbackRegistry (реализация в Phase 5)
+
+```typescript
+class CallbackRegistry {
+  private activeCallbacks = new Map<string, NatsSubscription[]>();
+
+  // Регистрация callbacks ПЕРЕД dispatch'ем job'а
+  async register(jobId: string, tools: ToolDefinition[], handlers: ToolHandlers): Promise<void> {
+    const subs: NatsSubscription[] = [];
+    for (const tool of tools) {
+      const sub = nc.subscribe(`claude.job.tool.${jobId}.${tool.name}`, {
+        callback: (err, msg) => {
+          const args = JSON.parse(msg.data);
+          handlers[tool.name](args)
+            .then(result => msg.respond(JSON.stringify(result)))
+            .catch(error => msg.respond(JSON.stringify({ error: error.message })));
+        }
+      });
+      subs.push(sub);
+    }
+    this.activeCallbacks.set(jobId, subs);
+
+    // Level 3: TTL safety net
+    setTimeout(() => {
+      if (this.activeCallbacks.has(jobId)) {
+        logger.warn({ jobId }, 'TTL expired, force cleanup callbacks');
+        this.cleanup(jobId);
+      }
+    }, JOB_TTL_MS); // e.g. 30 min
+  }
+
+  async cleanup(jobId: string): Promise<void> { /* unsubscribe + delete from map */ }
+  async cleanupAll(): Promise<void> { /* unsubscribe ALL on shutdown */ }
+}
+```
+
+### Матрица сценариев
+
+| Сценарий | Что происходит | Cleanup level |
+|----------|---------------|---------------|
+| Job completed (success) | Handler получает result → `cleanup(jobId)` | Level 2 (explicit) |
+| Job failed/timeout | Handler получает result → `cleanup(jobId)` | Level 2 (explicit) |
+| Handler crash | NATS connection dies → subscriptions auto-removed | Level 1 (auto) |
+| Runner crash | Claude dies → MCP dies → callbacks ждут до TTL | Level 3 (TTL) |
+| MCP server crash | Claude gets error → job fails → result → cleanup | Level 2 |
+| Handler restart | Старые subscriptions умерли с connection | Level 1 (auto) |
+| Зависший job | TTL expires → force cleanup | Level 3 (TTL) |
 
 ## Зависимости между фазами
 
-```
-Phase 0 (infra) ─┬─> Phase 1 (runner core) ──> Phase 2 (runner MCP)
-                  │                                      │
-                  └─> Phase 3 (handler scaffold) ──> Phase 4 (Telegram) ──> Phase 5 (dispatch)
-                                                                                    │
-                                                                Phase 2 + Phase 5 ──> Phase 6 (production)
+```mermaid
+graph LR
+    P0["Phase 0<br/>infra ✅"] --> P1["Phase 1<br/>runner core ✅"]
+    P0 --> P3["Phase 3<br/>handler scaffold"]
+    P1 --> P2["Phase 2<br/>Generic MCP Bridge"]
+    P3 --> P4["Phase 4<br/>Telegram bot"]
+    P4 --> P5["Phase 5<br/>dispatch + callbacks"]
+    P2 --> P6["Phase 6<br/>production"]
+    P5 --> P6
+
+    style P0 fill:#2d6a2d,color:#fff
+    style P1 fill:#2d6a2d,color:#fff
 ```
 
 Phase 1 и Phase 3 можно делать параллельно после Phase 0.
@@ -79,9 +220,9 @@ Phase 1 и Phase 3 можно делать параллельно после Pha
 
 **Файлы для создания:**
 - `packages/shared-types/src/jobs/job-type.enum.ts`
+- `packages/shared-types/src/jobs/tool-definition.ts`
 - `packages/shared-types/src/jobs/claude-job-request.ts`
 - `packages/shared-types/src/jobs/claude-job-result.ts`
-- `packages/shared-types/src/jobs/claude-job-comm.ts`
 - `packages/shared-types/src/jobs/index.ts`
 
 ### Ключевые типы
@@ -90,6 +231,14 @@ Phase 1 и Phase 3 можно делать параллельно после Pha
 // packages/shared-types/src/jobs/job-type.enum.ts
 export enum JobType {
   PR_REVIEW = 'pr-review',
+}
+
+// packages/shared-types/src/jobs/tool-definition.ts
+export interface ToolDefinition {
+  name: string;
+  description: string;
+  inputSchema: Record<string, unknown>;  // JSON Schema
+  timeoutMs?: number;  // default 30s; ask_user = 300_000
 }
 
 // packages/shared-types/src/jobs/claude-job-request.ts
@@ -109,16 +258,9 @@ export interface ClaudeJobRequest {
     timeoutMs?: number;
     allowedTools?: string[];  // --allowedTools
     permissionMode?: string;  // --permission-mode
-    mcpServers?: Record<string, McpServerConfig>; // дополнительные MCP
+    mcpServers?: Record<string, McpServerConfig>; // дополнительные статические MCP
   };
-  communication: {
-    enableNotifications: boolean;
-    enableAskUser: boolean;
-    askUserTimeoutMs?: number; // default 5 min
-  };
-  cache?: {
-    paths: string[];  // пути для сохранения между runs (e.g. ".pr-threads-cache")
-  };
+  tools?: ToolDefinition[];   // динамические tools для Generic MCP Bridge
   metadata: Record<string, unknown>;
   createdAt: string;
 }
@@ -150,20 +292,12 @@ export interface ClaudeJobResult {
   };
   metadata: Record<string, unknown>;
 }
-
-// packages/shared-types/src/jobs/claude-job-comm.ts
-export type ClaudeJobCommType = 'notification' | 'question' | 'answer' | 'progress';
-
-export interface ClaudeJobComm {
-  jobId: string;
-  jobType: JobType;
-  type: ClaudeJobCommType;
-  content: string;
-  level?: 'info' | 'warn' | 'error';  // для notification
-  questionId?: string;                  // для question/answer
-  createdAt: string;
-}
 ```
+
+> **Убрано из предыдущей версии:**
+> - `communication` — заменено на `tools[]` (generic MCP bridge)
+> - `cache` — кеш теперь на стороне handler'а, runner не управляет кешем
+> - `ClaudeJobComm` — больше не нужен, tool calls идут через NATS request/reply
 
 ### Модификация NatsPublisher
 
@@ -250,15 +384,11 @@ class CloneManager {
 
   // rm -rf <path>
   async cleanup(clonePath: string): Promise<void>
-
-  // Восстановить cached файлы из /data/cache/ в clone
-  async restoreCache(clonePath: string, jobId: string, cachePaths: string[]): Promise<void>
-
-  // Сохранить cached файлы из clone в /data/cache/
-  async saveCache(clonePath: string, jobId: string, cachePaths: string[]): Promise<void>
 }
 ```
 Путь клона: `<baseDir>/job-<jobId>/`
+
+> **Убрано:** `restoreCache` / `saveCache` — кеш теперь на стороне handler'а.
 
 **ClaudeConfigBuilder:**
 ```typescript
@@ -266,10 +396,16 @@ class ClaudeConfigBuilder {
   // Генерирует CLI аргументы из ClaudeJobRequest.claude
   buildArgs(config: ClaudeJobRequest['claude']): string[]
 
-  // Генерирует временный .claude-mcp.json для job'а
-  // Включает наш MCP comm server + дополнительные из request
-  buildMcpConfig(jobId: string, jobType: string, commMcpCommand: string,
-                 extraServers?: Record<string, McpServerConfig>): string  // returns path to temp file
+  // Генерирует .mcp.json для job'а
+  // Включает Generic MCP Bridge (если есть tools) + дополнительные статические MCP из request
+  buildMcpConfig(options: {
+    jobId: string;
+    tools: ToolDefinition[];
+    bridgeCommand: string;
+    natsUrl: string;
+    extraServers?: Record<string, McpServerConfig>;
+    configDir: string;
+  }): Promise<string>  // returns path to config file
 }
 ```
 
@@ -309,12 +445,10 @@ class JobExecutor {
 
   async execute(request: ClaudeJobRequest): Promise<ClaudeJobResult>
   // 1. clone repo
-  // 2. restore cache
-  // 3. build claude args + MCP config
-  // 4. run claude
-  // 5. save cache
-  // 6. publish result to NATS (claude.job.result.<jobType>)
-  // 7. cleanup clone (finally)
+  // 2. build claude args + MCP config (with dynamic tools from request.tools[])
+  // 3. run claude
+  // 4. publish result to NATS (claude.job.result.<jobType>)
+  // 5. cleanup clone (finally)
 }
 ```
 
@@ -325,7 +459,6 @@ NATS_URL=nats://localhost:4222
 NATS_CONSUMER_NAME=claude-job-runner
 NATS_ACK_WAIT_MS=900000          # 15 min (Claude может работать долго)
 CLONE_BASE_DIR=/tmp/claude-jobs
-CACHE_BASE_DIR=/data/cache       # Docker volume
 LOG_LEVEL=info
 ```
 
@@ -348,68 +481,192 @@ LOG_LEVEL=info
 
 ---
 
-## Phase 2: claude-job-runner — MCP communication server
+## Phase 2: Generic MCP → NATS Bridge
 
-**Goal:** MCP server который Claude использует для коммуникации с внешним миром через NATS.
+**Goal:** Универсальный MCP server — тонкий NATS proxy. Tools определяются динамически из env (передаётся `ClaudeJobRequest.tools[]`). Любой handler может зарегистрировать свои callbacks.
 
 **Файлы для создания:**
 ```
 apps/claude-job-runner/
   src/
-    mcp-server/
-      index.ts            # Standalone stdio MCP server entry point
-      tools.ts            # Tool definitions: send_notification, ask_user, report_progress
-      nats-comm.ts        # NATS publish/subscribe для MCP tools
+    mcp-bridge/
+      index.ts              # Standalone stdio MCP server entry point
+      nats-tool-proxy.ts    # Dynamic tool registration + NATS request/reply
+    __tests__/
+      nats-tool-proxy.test.ts
 ```
 
-**Зависимость:** `@modelcontextprotocol/sdk` (MCP SDK для stdio server)
+**Зависимости:** `@modelcontextprotocol/sdk`, `@nats-io/nats-core`
 
 ### Как это работает
 
-1. `ClaudeConfigBuilder` генерирует MCP config JSON с нашим comm server:
-   ```json
-   {
-     "mcpServers": {
-       "job-comm": {
-         "command": "node",
-         "args": ["/app/apps/claude-job-runner/dist/mcp-server/index.js"],
-         "env": {
-           "NATS_URL": "nats://nats:4222",
-           "JOB_ID": "xxx",
-           "JOB_TYPE": "pr-review"
-         }
-       }
-     }
-   }
-   ```
+```mermaid
+sequenceDiagram
+    participant R as Runner (JobExecutor)
+    participant MCP as MCP Bridge (subprocess)
+    participant NATS
+    participant H as Handler Callbacks
 
-2. Claude запускает MCP server как subprocess при старте
-3. MCP server подключается к NATS самостоятельно
-4. Tools:
+    R->>R: Read request.tools[]
+    R->>R: Generate MCP config with tools as env
+    R->>MCP: Start as Claude MCP server (stdio)
+    MCP->>MCP: Parse TOOL_DEFINITIONS from env
+    MCP->>NATS: Connect (NATS_URL from env)
+    MCP->>MCP: Register each tool as MCP tool
 
-**send_notification(message, level):**
-- Fire & forget -> publish в `claude.job.outgoing.<jobType>.<jobId>`
-- Payload: `ClaudeJobComm { type: 'notification', content, level }`
+    Note over MCP,NATS: Claude calls a tool...
+    MCP->>NATS: nc.request("claude.job.tool.{JOB_ID}.{toolName}", args)
+    NATS->>H: Deliver to subscribed callback
+    H->>NATS: msg.respond(result)
+    NATS->>MCP: Return reply
+    MCP->>MCP: Return result to Claude
 
-**ask_user(question):**
-- Publish question в `claude.job.outgoing.<jobType>.<jobId>`
-- Subscribe на `claude.job.incoming.<jobType>.<jobId>` и ждать ответ
-- Timeout: `ASK_USER_TIMEOUT_MS` (default 5 мин)
-- Возвращает ответ пользователя или "No response (timeout)"
+    Note over MCP: On shutdown (Claude exits)...
+    MCP->>NATS: Drain connection
+    MCP->>MCP: Process exit
+```
 
-**report_progress(status):**
-- Fire & forget -> publish в `claude.job.outgoing.<jobType>.<jobId>`
-- Payload: `ClaudeJobComm { type: 'progress', content: status }`
+### MCP Config (генерируется ClaudeConfigBuilder)
+
+```json
+{
+  "mcpServers": {
+    "job-bridge": {
+      "command": "node",
+      "args": ["/app/apps/claude-job-runner/dist/mcp-bridge/index.js"],
+      "env": {
+        "NATS_URL": "nats://nats:4222",
+        "JOB_ID": "abc-123",
+        "TOOL_DEFINITIONS": "[{\"name\":\"reply_to_comment\",\"description\":\"...\",\"inputSchema\":{...},\"timeoutMs\":30000}]"
+      }
+    }
+  }
+}
+```
+
+### NatsToolProxy (ядро)
+
+```typescript
+class NatsToolProxy {
+  constructor(
+    private nc: NatsConnection,
+    private jobId: string,
+    private logger: Logger
+  ) {}
+
+  /**
+   * Регистрирует tools на MCP server.
+   * Каждый tool при вызове делает NATS request и ждёт reply.
+   */
+  registerTools(server: McpServer, tools: ToolDefinition[]): void {
+    for (const tool of tools) {
+      server.tool(tool.name, tool.description, tool.inputSchema, async (args) => {
+        const subject = `claude.job.tool.${this.jobId}.${tool.name}`;
+        const timeout = tool.timeoutMs ?? 30_000;
+
+        try {
+          const reply = await this.nc.request(subject, JSON.stringify(args), { timeout });
+          return JSON.parse(reply.data);
+        } catch (error) {
+          if (error.code === 'TIMEOUT') {
+            return { error: `Tool ${tool.name} timed out after ${timeout}ms` };
+          }
+          return { error: error.message };
+        }
+      });
+    }
+  }
+
+  /** Graceful shutdown: drain NATS connection */
+  async shutdown(): Promise<void> {
+    await this.nc.drain();
+  }
+}
+```
+
+### Entry point (index.ts)
+
+```typescript
+// 1. Parse env
+const jobId = process.env.JOB_ID!;
+const natsUrl = process.env.NATS_URL!;
+const tools: ToolDefinition[] = JSON.parse(process.env.TOOL_DEFINITIONS!);
+
+// 2. Connect to NATS
+const nc = await connect({ servers: natsUrl });
+
+// 3. Create MCP server
+const server = new McpServer({ name: 'job-bridge', version: '1.0.0' });
+const proxy = new NatsToolProxy(nc, jobId, logger);
+
+// 4. Register tools dynamically
+proxy.registerTools(server, tools);
+
+// 5. Start stdio transport
+const transport = new StdioServerTransport();
+await server.connect(transport);
+
+// 6. Cleanup on exit (CRITICAL)
+const cleanup = async () => {
+  await proxy.shutdown();
+  process.exit(0);
+};
+process.on('SIGTERM', cleanup);
+process.on('SIGINT', cleanup);
+process.on('beforeExit', cleanup);
+```
+
+### Модификация ClaudeConfigBuilder (Phase 1)
+
+Обновить `buildMcpConfig` для генерации bridge конфига из `request.tools[]`:
+
+```typescript
+async buildMcpConfig(options: {
+  jobId: string;
+  tools: ToolDefinition[];        // ← NEW: dynamic tools
+  bridgeCommand: string;          // path to mcp-bridge/index.js
+  natsUrl: string;
+  extraServers?: Record<string, McpServerConfig>;
+  configDir: string;
+}): Promise<string> {
+  const mcpConfig: Record<string, McpServerConfig> = {};
+
+  // Add generic bridge MCP (only if tools defined)
+  if (options.tools.length > 0) {
+    mcpConfig['job-bridge'] = {
+      command: 'node',
+      args: [options.bridgeCommand],
+      env: {
+        NATS_URL: options.natsUrl,
+        JOB_ID: options.jobId,
+        TOOL_DEFINITIONS: JSON.stringify(options.tools),
+      },
+    };
+  }
+
+  // Add extra static MCP servers
+  if (options.extraServers) {
+    Object.assign(mcpConfig, options.extraServers);
+  }
+
+  // Write .mcp.json
+  const configPath = join(options.configDir, '.mcp.json');
+  await writeFile(configPath, JSON.stringify({ mcpServers: mcpConfig }, null, 2));
+  return configPath;
+}
+```
 
 ### Тесты
 
-- `mcp-server/tools.test.ts` — tool definitions (names, schemas)
-- `mcp-server/nats-comm.test.ts` — publish/subscribe с моками NATS
+| Файл | Что тестируем |
+|------|--------------|
+| nats-tool-proxy.test.ts | registerTools создаёт tools, NATS request/reply с mock, timeout handling, error handling |
 
 ### Верификация
 
-1. `pnpm --filter @gh-automation/claude-job-runner build` — MCP server компилируется
-2. Ручной тест: запустить MCP server standalone с env vars -> вызвать tool -> проверить что message в NATS
+1. `pnpm --filter @gh-automation/claude-job-runner build` — MCP bridge компилируется
+2. Unit тесты: proxy корректно маршрутизирует tool calls в NATS
+3. Ручной тест: запустить MCP bridge с env vars → вызвать tool через MCP protocol → проверить NATS request
 
 ---
 
@@ -538,14 +795,15 @@ bot.callbackQuery(/^approve:(.+):(\d+)$/, async (ctx) => {
 });
 ```
 
-**AskUser relay (NATS -> Telegram -> NATS):**
+**AskUser relay (через Generic MCP Bridge):**
 ```typescript
-// Получить вопрос от Claude через NATS (claude.job.outgoing.pr-review.<jobId>)
-// -> Отправить в Telegram с reply keyboard
-// -> Получить ответ пользователя
-// -> Publish в NATS (claude.job.incoming.pr-review.<jobId>)
+// Claude вызывает tool `ask_user` → MCP Bridge → NATS request
+// → Handler callback получает вопрос
+// → Отправить в Telegram с force_reply
+// → Получить ответ пользователя
+// → NATS reply с ответом → MCP Bridge → Claude
 
-// Для MVP: используем force_reply для получения ответа
+// Реализация в Phase 5 (tool-handlers.ts → ask_user callback)
 ```
 
 **NotificationSender:**
@@ -581,51 +839,214 @@ TELEGRAM_ALLOWED_USERS=123456,789012   # user IDs через запятую
 
 ---
 
-## Phase 5: pr-review-handler — job dispatch + result/comm handling
+## Phase 5: pr-review-handler — job dispatch + callbacks + result handling
 
-**Goal:** Связать всё: при одобрении в Telegram -> dispatch job -> обработать результат -> Telegram notification.
+**Goal:** Связать всё: получить комментарии → Telegram approval → зарегистрировать callbacks → dispatch job → обработать tool calls → обработать результат.
 
 **Файлы для создания:**
 ```
 apps/pr-review-handler/
   src/
     jobs/
-      prompt-builder.ts          # Генерация промпта для PR review
-      job-dispatcher.ts          # Создать ClaudeJobRequest, publish в CLAUDE_JOBS
+      comment-fetcher.ts         # Получение комментариев через gh-pr-threads
+      prompt-builder.ts          # Генерация промпта с комментариями
+      tool-definitions.ts        # ToolDefinition[] для PR review job'ов
+      callback-registry.ts       # Регистрация/снятие NATS callbacks per-job
+      tool-handlers.ts           # Реализации callbacks (reply_to_comment, send_notification, ask_user)
+      job-dispatcher.ts          # Создать ClaudeJobRequest, register callbacks, publish
       result-handler.ts          # NATS consumer на claude.job.result.pr-review
-      comm-handler.ts            # NATS consumer на claude.job.outgoing.pr-review.*
     __tests__/
+      comment-fetcher.test.ts
       prompt-builder.test.ts
+      tool-definitions.test.ts
+      callback-registry.test.ts
+      tool-handlers.test.ts
       job-dispatcher.test.ts
       result-handler.test.ts
-      comm-handler.test.ts
+```
+
+### Flow
+
+```mermaid
+sequenceDiagram
+    participant GH as GitHub (gh-pr-threads)
+    participant H as pr-review-handler
+    participant TG as Telegram
+    participant NATS
+    participant R as claude-job-runner
+
+    H->>H: Receive PR notification from NATS
+    H->>H: Filter: isPRCommentEvent()
+    H->>GH: Fetch PR comments (gh-pr-threads)
+    GH-->>H: Comments JSON
+    H->>H: Cache comments (in-memory/file)
+    H->>TG: Send approval request with inline keyboard
+    TG-->>H: User clicks "Yes"
+
+    H->>H: callbackRegistry.register(jobId, tools, handlers)
+    Note over H,NATS: Callbacks registered BEFORE dispatch
+
+    H->>NATS: Publish ClaudeJobRequest
+    NATS->>R: Deliver job
+    R->>R: Clone, start Claude with MCP bridge
+
+    loop Tool Calls (via NATS request/reply)
+        R-->>NATS: claude.job.tool.{jobId}.reply_to_comment
+        NATS-->>H: Callback invoked
+        H->>GH: gh-pr-threads reply
+        H-->>NATS: respond({success})
+    end
+
+    R->>NATS: Publish ClaudeJobResult
+    NATS->>H: Deliver result
+    H->>H: callbackRegistry.cleanup(jobId)
+    Note over H: Callbacks removed AFTER result
+    H->>TG: Send result notification
 ```
 
 ### Ключевые компоненты
 
-**PromptBuilder:**
+**CommentFetcher:** (получение комментариев на стороне handler'а)
 ```typescript
-function buildPrompt(repository: string, prNumber: number): string {
-  // Инструкции для Claude:
-  // - Использовать npx gh-pr-threads <url> для получения комментариев
-  // - Проанализировать и исправить каждый комментарий
-  // - Сделать коммит и push
-  // - Использовать send_notification для прогресса
-  // - Использовать ask_user если что-то неясно
+class CommentFetcher {
+  /** Получает комментарии через gh-pr-threads CLI */
+  async fetch(repository: string, prNumber: number): Promise<PrThreads> {
+    const { stdout } = await execa('npx', [
+      'gh-pr-threads',
+      `https://github.com/${repository}/pull/${prNumber}`,
+      '--json'
+    ]);
+    return JSON.parse(stdout);
+  }
 }
 ```
 
-**JobDispatcher:**
+**PromptBuilder:** (комментарии уже в промпте)
+```typescript
+function buildPrompt(repository: string, prNumber: number, comments: PrThreads): string {
+  return `
+## Задача
+Обработай комментарии к PR #${prNumber} в репозитории ${repository}.
+
+## Комментарии
+${JSON.stringify(comments, null, 2)}
+
+## Инструкции
+1. Для каждого комментария проанализируй что нужно исправить
+2. Внеси исправления в код
+3. Используй tool \`reply_to_comment\` чтобы ответить на каждый комментарий
+4. Используй tool \`send_notification\` для отправки прогресса
+5. Если что-то непонятно — используй tool \`ask_user\`
+6. Сделай git commit и push
+  `.trim();
+}
+```
+
+**ToolDefinitions:** (определения tools для PR review)
+```typescript
+const PR_REVIEW_TOOLS: ToolDefinition[] = [
+  {
+    name: 'reply_to_comment',
+    description: 'Reply to a PR review comment thread on GitHub',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        threadId: { type: 'string', description: 'Thread ID from comments JSON' },
+        message: { type: 'string', description: 'Reply message text' },
+      },
+      required: ['threadId', 'message'],
+    },
+    timeoutMs: 30_000,
+  },
+  {
+    name: 'send_notification',
+    description: 'Send a notification to the user via Telegram',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        message: { type: 'string', description: 'Notification message' },
+        level: { type: 'string', enum: ['info', 'warn', 'error'], default: 'info' },
+      },
+      required: ['message'],
+    },
+    timeoutMs: 10_000,
+  },
+  {
+    name: 'ask_user',
+    description: 'Ask the user a question and wait for their response via Telegram',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        question: { type: 'string', description: 'Question to ask the user' },
+      },
+      required: ['question'],
+    },
+    timeoutMs: 300_000, // 5 min — ждём ответа пользователя
+  },
+];
+```
+
+**ToolHandlers:** (реализации callbacks)
+```typescript
+function createToolHandlers(deps: {
+  commentFetcher: CommentFetcher;
+  telegramBot: Bot;
+  chatId: string;
+  logger: Logger;
+}): Record<string, (args: unknown) => Promise<unknown>> {
+  return {
+    reply_to_comment: async ({ threadId, message }) => {
+      await execa('npx', ['gh-pr-threads', 'reply', threadId, message]);
+      return { success: true };
+    },
+
+    send_notification: async ({ message, level }) => {
+      await deps.telegramBot.api.sendMessage(
+        deps.chatId,
+        formatNotification(message, level)
+      );
+      return { success: true };
+    },
+
+    ask_user: async ({ question }) => {
+      // Отправить вопрос в Telegram с force_reply
+      const msg = await deps.telegramBot.api.sendMessage(
+        deps.chatId,
+        `Claude asks:\n${question}`,
+        { reply_markup: { force_reply: true } }
+      );
+      // Ждать ответ (через Promise + bot.on('message') handler)
+      const answer = await waitForReply(deps.telegramBot, msg.message_id, 300_000);
+      return { answer };
+    },
+  };
+}
+```
+
+**JobDispatcher:** (register callbacks → dispatch)
 ```typescript
 class JobDispatcher {
-  constructor(publisher: NatsPublisher, logger: Logger) {}
+  constructor(
+    private publisher: NatsPublisher,
+    private callbackRegistry: CallbackRegistry,
+    private logger: Logger,
+  ) {}
 
-  async dispatch(payload: GithubNotificationEvent['payload']): Promise<string> {
+  async dispatch(
+    payload: GithubNotificationEvent['payload'],
+    comments: PrThreads,
+    toolHandlers: ToolHandlers
+  ): Promise<string> {
     const jobId = crypto.randomUUID();
+
+    // 1. Register callbacks BEFORE dispatch (гарантия что callbacks готовы)
+    await this.callbackRegistry.register(jobId, PR_REVIEW_TOOLS, toolHandlers);
+
+    // 2. Build job request
     const request: ClaudeJobRequest = {
       jobId,
       jobType: JobType.PR_REVIEW,
-      prompt: buildPrompt(payload.repository, payload.subjectNumber!),
+      prompt: buildPrompt(payload.repository, payload.subjectNumber!, comments),
       repository: {
         url: `https://github.com/${payload.repository}.git`,
         branch: await getBranchName(payload.repository, payload.subjectNumber!),
@@ -635,20 +1056,10 @@ class JobDispatcher {
         maxTurns: 50,
         maxBudgetUsd: 5,
         timeoutMs: 300_000,
-        allowedTools: ['Edit', 'Write', 'Read', 'Glob', 'Grep', 'Bash(git:*)', 'Bash(npm:*)', 'Bash(npx gh-pr-threads:*)'],
+        allowedTools: ['Edit', 'Write', 'Read', 'Glob', 'Grep', 'Bash(git:*)'],
         permissionMode: 'bypassPermissions',
-        mcpServers: {
-          // serena, sequential-thinking -- задаются через конфиг runner'а
-        },
       },
-      communication: {
-        enableNotifications: true,
-        enableAskUser: true,
-        askUserTimeoutMs: 300_000,
-      },
-      cache: {
-        paths: ['.pr-threads-cache'],
-      },
+      tools: PR_REVIEW_TOOLS,  // ← dynamic MCP tools
       metadata: {
         repository: payload.repository,
         prNumber: payload.subjectNumber,
@@ -658,6 +1069,7 @@ class JobDispatcher {
       createdAt: new Date().toISOString(),
     };
 
+    // 3. Publish
     await this.publisher.publish({
       eventId: jobId,
       eventType: `claude.job.request.${JobType.PR_REVIEW}`,
@@ -670,54 +1082,63 @@ class JobDispatcher {
 }
 ```
 
-**ResultHandler:**
+**ResultHandler:** (cleanup callbacks on result)
 ```typescript
 class ResultHandler {
-  // NATS consumer на claude.job.result.pr-review
-  // При получении результата -> format -> Telegram notification
-  // status 'completed' -> sendResult (сколько исправил, скипнул, ссылка на PR)
-  // status 'failed'/'timeout' -> sendError
-}
-```
+  constructor(
+    private callbackRegistry: CallbackRegistry,
+    private notificationSender: NotificationSender,
+    private logger: Logger,
+  ) {}
 
-**CommHandler:**
-```typescript
-class CommHandler {
-  // NATS consumer на claude.job.outgoing.pr-review.*
-  // type 'notification' -> Telegram notification
-  // type 'question' -> Telegram message с force_reply -> ждать ответ -> publish в incoming
-  // type 'progress' -> обновить статус (или игнорировать в MVP)
+  async handle(result: ClaudeJobResult): Promise<void> {
+    // 1. ВСЕГДА cleanup callbacks (даже если notification fail)
+    await this.callbackRegistry.cleanup(result.jobId);
+
+    // 2. Send Telegram notification
+    if (result.status === 'completed') {
+      await this.notificationSender.sendResult(result);
+    } else {
+      await this.notificationSender.sendError(result);
+    }
+  }
 }
 ```
 
 ### Wiring в index.ts
 
-3 параллельных consumer'а:
 ```typescript
-// 1. NotificationListener (GITHUB_EVENTS) -> filter -> dedup -> approval request
-// 2. ResultHandler (CLAUDE_JOBS, claude.job.result.pr-review) -> Telegram
-// 3. CommHandler (CLAUDE_JOBS, claude.job.outgoing.pr-review.>) -> Telegram relay
+// 1. NotificationListener (GITHUB_EVENTS) -> filter -> fetch comments -> approval
+// 2. ResultHandler (CLAUDE_JOBS, claude.job.result.pr-review) -> cleanup + Telegram
 
 await Promise.all([
   notificationListener.listen(approvalFlow),
   resultHandler.listen(),
-  commHandler.listen(),
 ]);
+
+// Shutdown: cleanup ALL active callbacks
+process.on('SIGTERM', async () => {
+  await callbackRegistry.cleanupAll();
+  await closeNatsConnection(logger);
+});
 ```
 
 ### Тесты
 
 | Файл | Что тестируем |
 |------|--------------|
-| prompt-builder.test.ts | содержит repo, PR #, gh-pr-threads команду |
-| job-dispatcher.test.ts | формат ClaudeJobRequest, publish вызов |
-| result-handler.test.ts | парсинг результата, вызов Telegram |
-| comm-handler.test.ts | routing по type (notification/question/progress) |
+| comment-fetcher.test.ts | парсинг gh-pr-threads output, error handling |
+| prompt-builder.test.ts | содержит repo, PR #, comments JSON, tool instructions |
+| tool-definitions.test.ts | schemas валидны, timeouts корректны |
+| callback-registry.test.ts | register, cleanup, cleanupAll, TTL expiry |
+| tool-handlers.test.ts | reply_to_comment вызывает execa, send_notification вызывает bot |
+| job-dispatcher.test.ts | register callbacks перед publish, формат ClaudeJobRequest |
+| result-handler.test.ts | cleanup вызывается всегда, Telegram notification |
 
 ### Верификация
 
 1. `pnpm --filter @gh-automation/pr-review-handler test run`
-2. E2E: publish test event в GITHUB_EVENTS -> pr-review-handler получает -> Telegram approval -> нажать "Да" -> job request в CLAUDE_JOBS
+2. E2E: publish test event → handler fetch comments → Telegram → approve → callbacks registered → job dispatched → tool calls work → result → cleanup
 
 ---
 
@@ -729,17 +1150,45 @@ await Promise.all([
 
 Особенности:
 - Runtime: `git`, `gh` CLI, `claude` CLI (`npm i -g @anthropic-ai/claude-code`)
-- MCP серверы: `@anthropic-ai/claude-mcp-server-*` (если нужны), `@modelcontextprotocol/sdk`
-- Volume mount: `/data/cache` для gh-pr-threads кеша
-- Volume mount: `/tmp/claude-jobs` для клонов (tmpfs?)
+- MCP Bridge: `@modelcontextprotocol/sdk` (уже в dependencies)
+- Volume mount: `/tmp/claude-jobs` для клонов (tmpfs рекомендуется)
 - `GH_TOKEN` и `ANTHROPIC_API_KEY` через env
+- **Нет cache volume** — кеш на стороне handler'а
 
 ### pr-review-handler Dockerfile
 
 Особенности:
-- Только Node.js runtime (без git, без claude)
-- `gh` CLI нужен для `gh pr view` (получение branch name)
+- Node.js runtime + `gh` CLI (для `gh pr view` и `gh-pr-threads`)
 - grammy long-polling (не нужен incoming webhook)
+- **Persistent storage для PR processing state** (см. ниже)
+
+### PR Processing State (TODO: выбрать хранилище)
+
+Handler хранит **персистентный стейт per-PR**: какие нитпики обработаны, скипнуты, failed. Это нужно чтобы при повторном запуске не обрабатывать уже обработанные комментарии.
+
+```typescript
+interface PrProcessingState {
+  repository: string;
+  prNumber: number;
+  threads: Record<string, {   // key = threadId
+    status: 'processed' | 'skipped' | 'failed';
+    processedAt: string;
+    jobId: string;             // в рамках какого job'а обработано
+    summary?: string;          // краткий результат
+  }>;
+  lastUpdated: string;
+}
+```
+
+**Варианты хранилища:**
+| Вариант | Плюсы | Минусы | MVP? |
+|---------|-------|--------|------|
+| File-based (JSON per PR) | Просто, Docker volume | Не масштабируется, нет конкурентного доступа | Да |
+| SQLite | Быстро, персистентно, SQL | Доп. зависимость | Возможно |
+| PostgreSQL (existing) | Уже есть в стеке, масштабируется | Нужна миграция, overhead для простых данных | Позже |
+| NATS KV | Уже есть NATS, key-value API | Не предназначен для сложных запросов | Возможно |
+
+**Для MVP рекомендация:** File-based JSON — `/data/pr-state/{owner}_{repo}_pr-{N}.json`, Docker volume для персистентности.
 
 ### docker-compose additions
 
@@ -748,18 +1197,19 @@ claude-job-runner:
   depends_on:
     nats: { condition: service_healthy }
   volumes:
-    - claude-cache:/data/cache
     - ~/.config/gh:/home/app/.config/gh:ro
   environment:
-    NATS_URL, ANTHROPIC_API_KEY, GH_TOKEN, CLONE_BASE_DIR, CACHE_BASE_DIR, LOG_LEVEL
+    NATS_URL, ANTHROPIC_API_KEY, GH_TOKEN, CLONE_BASE_DIR, LOG_LEVEL
 
 pr-review-handler:
   depends_on:
     nats: { condition: service_healthy }
   volumes:
     - ~/.config/gh:/home/app/.config/gh:ro
+    - pr-state:/data/pr-state    # Persistent PR processing state
   environment:
-    NATS_URL, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, TELEGRAM_ALLOWED_USERS, GH_TOKEN, LOG_LEVEL
+    NATS_URL, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, TELEGRAM_ALLOWED_USERS, GH_TOKEN,
+    PR_STATE_DIR=/data/pr-state, LOG_LEVEL
 ```
 
 ### .env.example additions
@@ -768,12 +1218,12 @@ pr-review-handler:
 # Claude Job Runner
 ANTHROPIC_API_KEY=sk-ant-xxx
 CLONE_BASE_DIR=/tmp/claude-jobs
-CACHE_BASE_DIR=/data/cache
 
 # PR Review Handler
 TELEGRAM_BOT_TOKEN=123456:ABC-xxx
 TELEGRAM_CHAT_ID=-100xxx
 TELEGRAM_ALLOWED_USERS=123456
+PR_STATE_DIR=/data/pr-state
 ```
 
 ### Верификация
