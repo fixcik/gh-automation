@@ -210,13 +210,33 @@ See `.env.example` for complete list.
 
 ## Git Worktrees
 
-**Use `/using-git-worktrees` skill for guided setup.**
+**⚠️ CRITICAL: Always use worktrees for new features/fixes. NEVER work directly in master branch.**
 
-New features/fixes require isolated worktree in `.worktrees/`:
-- **Create:** `git worktree add .worktrees/<branch-name> -b <branch-name>`
-- **Initialize:** `cd .worktrees/<branch-name> && pnpm install && pnpm build`
-- **Infrastructure:** Run `docker-compose up -d` from main directory (shared across worktrees)
-- **Development:** Execute all scripts (dev, test, build) from worktree directory
+### Before Starting Any Feature/Fix
+
+**MANDATORY:** Create isolated worktree using `/using-git-worktrees` skill:
+
+```bash
+# DON'T start working in main directory!
+# First create worktree:
+git worktree add .worktrees/<branch-name> -b <branch-name>
+cd .worktrees/<branch-name>
+pnpm install && pnpm build
+```
+
+### Workflow
+
+1. **Create worktree:** `/using-git-worktrees <branch-name>` skill handles setup automatically
+2. **Work in worktree:** All code changes, commits, tests happen in `.worktrees/<branch-name>/`
+3. **Shared infrastructure:** `docker-compose` runs from main directory (shared DB, NATS, etc.)
+4. **Clean main branch:** Main directory stays on `master`, always clean for emergency fixes
+
+### Why Worktrees?
+
+- ✅ Isolates work-in-progress from stable master
+- ✅ Multiple features in parallel without branch switching
+- ✅ Clean rollback: delete worktree directory
+- ✅ Shared infrastructure (one docker-compose for all worktrees)
 
 ## Common Gotchas
 
