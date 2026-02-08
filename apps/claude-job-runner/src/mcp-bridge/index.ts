@@ -15,7 +15,14 @@ async function main() {
     process.exit(1);
   }
 
-  const tools: ToolDefinition[] = JSON.parse(toolDefsRaw);
+  let tools: ToolDefinition[];
+  try {
+    tools = JSON.parse(toolDefsRaw);
+  } catch (error) {
+    console.error('Failed to parse TOOL_DEFINITIONS:', error);
+    console.error('Raw value:', toolDefsRaw.substring(0, 200));
+    process.exit(1);
+  }
 
   const nc = await connect({ servers: natsUrl });
   const proxy = new NatsToolProxy(nc, jobId);
@@ -55,6 +62,7 @@ async function main() {
   console.error(`MCP bridge started for job ${jobId}`);
 
   const cleanup = async () => {
+    await server.close();
     await proxy.shutdown();
     process.exit(0);
   };
