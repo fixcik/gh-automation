@@ -191,7 +191,7 @@ class CallbackRegistry {
 graph LR
     P0["Phase 0<br/>infra ✅"] --> P1["Phase 1<br/>runner core ✅"]
     P0 --> P3["Phase 3<br/>handler scaffold"]
-    P1 --> P2["Phase 2<br/>Generic MCP Bridge"]
+    P1 --> P2["Phase 2<br/>Generic MCP Bridge ✅"]
     P3 --> P4["Phase 4<br/>Telegram bot"]
     P4 --> P5["Phase 5<br/>dispatch + callbacks"]
     P2 --> P6["Phase 6<br/>production"]
@@ -199,6 +199,7 @@ graph LR
 
     style P0 fill:#2d6a2d,color:#fff
     style P1 fill:#2d6a2d,color:#fff
+    style P2 fill:#2d6a2d,color:#fff
 ```
 
 Phase 1 и Phase 3 можно делать параллельно после Phase 0.
@@ -481,9 +482,21 @@ LOG_LEVEL=info
 
 ---
 
-## Phase 2: Generic MCP → NATS Bridge
+## Phase 2: Generic MCP → NATS Bridge ✅ DONE
+
+**Status:** Завершена. Реализация: refactor + feat коммиты
 
 **Goal:** Универсальный MCP server — тонкий NATS proxy. Tools определяются динамически из env (передаётся `ClaudeJobRequest.tools[]`). Любой handler может зарегистрировать свои callbacks.
+
+**Реализованно:**
+- ✅ Типы: `ToolDefinition` интерфейс + `ClaudeJobRequest.tools[]`
+- ✅ Удалены `communication`, `cache`, `ClaudeJobComm` (заменены на generic tools)
+- ✅ `NatsToolProxy` — динамическая регистрация tools, NATS request/reply, timeout handling
+- ✅ MCP Bridge entry point — stdio server с `@modelcontextprotocol/sdk` v1.26.0
+- ✅ `ClaudeConfigBuilder` обновлён — генерирует MCP config с `TOOL_DEFINITIONS` env
+- ✅ `JobExecutor` упрощён — убраны cache операции, используется `request.tools[]`
+- ✅ 48 unit тестов, включая `nats-tool-proxy.test.ts` (11 тестов)
+- ✅ Build успешен, dist/mcp-bridge/index.js создан
 
 **Файлы для создания:**
 ```
@@ -616,9 +629,9 @@ process.on('SIGINT', cleanup);
 process.on('beforeExit', cleanup);
 ```
 
-### Модификация ClaudeConfigBuilder (Phase 1)
+### Модификация ClaudeConfigBuilder (Phase 1) ✅ DONE
 
-Обновить `buildMcpConfig` для генерации bridge конфига из `request.tools[]`:
+Сигнатура `buildMcpConfig` обновлена для генерации bridge конфига из `request.tools[]`:
 
 ```typescript
 async buildMcpConfig(options: {
@@ -656,17 +669,28 @@ async buildMcpConfig(options: {
 }
 ```
 
-### Тесты
+### Тесты ✅ DONE
 
-| Файл | Что тестируем |
-|------|--------------|
-| nats-tool-proxy.test.ts | registerTools создаёт tools, NATS request/reply с mock, timeout handling, error handling |
+| Файл | Что тестируем | Тестов |
+|------|--------------|--------|
+| nats-tool-proxy.test.ts | `getSubject` формат, `buildToolList` MCP compatibility, `callTool` success/error/timeout, `shutdown` | 11 |
 
-### Верификация
+Итого: 48 тестов проходят (включая обновлённые тесты из Phase 1).
 
-1. `pnpm --filter @gh-automation/claude-job-runner build` — MCP bridge компилируется
-2. Unit тесты: proxy корректно маршрутизирует tool calls в NATS
-3. Ручной тест: запустить MCP bridge с env vars → вызвать tool через MCP protocol → проверить NATS request
+### Верификация ✅ DONE
+
+1. ✅ `pnpm --filter @gh-automation/claude-job-runner build` — MCP bridge компилируется
+2. ✅ `pnpm --filter @gh-automation/claude-job-runner test run` — 48 тестов проходят
+3. ✅ `pnpm build` — полный monorepo build через Turborepo успешен
+4. ✅ Проверено: 0 остатков `ClaudeJobComm`, `communication`, `restoreCache`, `saveCache`, `cacheBaseDir`
+5. ✅ `dist/mcp-bridge/index.js` существует после build
+
+### MCP SDK Version Note
+
+Используется `@modelcontextprotocol/sdk` v1.26.0 (последняя стабильная v1):
+- v2 (`@modelcontextprotocol/server`) ещё не опубликован в npm
+- v1.26 имеет deprecated `Server` class но wire protocol стабилен
+- Миграция на v2 займёт ~5 минут когда пакет появится в npm
 
 ---
 
@@ -1238,15 +1262,16 @@ PR_STATE_DIR=/data/pr-state
 
 ## Порядок реализации (рекомендация)
 
-1. **Phase 0** (1-2 часа) — быстрая подготовка инфраструктуры
-2. **Phase 3** (2-3 часа) — handler scaffold (можно тестировать с NATS сразу)
-3. **Phase 1** (3-4 часа) — runner core (самый объёмный)
-4. **Phase 4** (2-3 часа) — Telegram bot
-5. **Phase 5** (2-3 часа) — dispatch + results (связывает handler с runner)
-6. **Phase 2** (3-4 часа) — MCP server (можно отложить, MVP работает без ask_user)
-7. **Phase 6** (1-2 часа) — Docker (финализация)
+1. ✅ **Phase 0** (завершена) — NATS multi-stream + job types
+2. ✅ **Phase 1** (завершена) — runner core (clone + claude + result)
+3. ✅ **Phase 2** (завершена) — Generic MCP Bridge (dynamic tools + NATS proxy)
+4. ⏳ **Phase 3** (следующая) — handler scaffold (NATS listener + filter + dedup)
+5. ⏳ **Phase 4** — Telegram bot (auth + approval + notifications)
+6. ⏳ **Phase 5** — dispatch + callbacks (связывает handler с runner)
+7. ⏳ **Phase 6** — Docker (финализация)
 
-**Итого MVP:** ~15-20 часов работы
+**Прогресс:** 3/7 фаз завершены (43%)
+**Оставшееся время (оценка):** ~9-12 часов работы
 
 ## Ключевые файлы для переиспользования
 

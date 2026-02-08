@@ -1,5 +1,5 @@
-import { access, cp, mkdir, rm } from 'node:fs/promises';
-import { dirname, join, resolve, sep } from 'node:path';
+import { mkdir, rm } from 'node:fs/promises';
+import { join } from 'node:path';
 import type { Logger } from '@gh-automation/logger';
 import type { ClaudeJobRequest } from '@gh-automation/shared-types';
 import { execa } from 'execa';
@@ -7,14 +7,18 @@ import { execa } from 'execa';
 export class CloneManager {
   constructor(
     private readonly baseDir: string,
-    private readonly cacheBaseDir: string,
     private readonly logger: Logger
   ) {}
 
   /**
    * Builds the clone directory path for a job.
+   * Validates jobId to prevent path traversal attacks.
    */
   getClonePath(jobId: string): string {
+    // Only allow alphanumeric, dash, underscore (RFC 4122 UUIDs + common formats)
+    if (!/^[a-zA-Z0-9_-]+$/.test(jobId)) {
+      throw new Error(`Invalid jobId format: ${jobId}`);
+    }
     return join(this.baseDir, `job-${jobId}`);
   }
 
@@ -64,77 +68,6 @@ export class CloneManager {
       this.logger.debug({ clonePath }, 'Clone directory cleaned up');
     } catch (error) {
       this.logger.warn({ clonePath, error }, 'Failed to cleanup clone directory');
-    }
-  }
-
-  /**
-   * Builds the cache key path for a job.
-   * Cache is keyed by aggregateId (e.g. "owner/repo:42") to persist across job runs.
-   */
-  getCachePath(aggregateId: string): string {
-    // Sanitize aggregateId for filesystem: replace / and : with _
-    const sanitized = aggregateId.replace(/[/:]/g, '_');
-    return join(this.cacheBaseDir, sanitized);
-  }
-
-  /**
-   * Resolves a relative path against a base directory and validates it stays within bounds.
-   * Returns null if the path attempts to escape the base directory (path traversal).
-   */
-  private resolveSubPath(baseDir: string, relativePath: string): string | null {
-    const base = resolve(baseDir);
-    const resolved = resolve(baseDir, relativePath);
-    if (resolved === base || resolved.startsWith(base + sep)) return resolved;
-    return null;
-  }
-
-  /**
-   * Restores cached paths from cache directory into the clone.
-   */
-  async restoreCache(clonePath: string, aggregateId: string, cachePaths: string[]): Promise<void> {
-    const cacheSrcDir = this.getCachePath(aggregateId);
-
-    for (const relativePath of cachePaths) {
-      const src = this.resolveSubPath(cacheSrcDir, relativePath);
-      const dest = this.resolveSubPath(clonePath, relativePath);
-      if (!src || !dest) {
-        this.logger.warn({ relativePath }, 'Invalid cache path, skipping');
-        continue;
-      }
-
-      try {
-        await access(src);
-        await mkdir(dirname(dest), { recursive: true });
-        await cp(src, dest, { recursive: true });
-        this.logger.debug({ src, dest }, 'Cache restored');
-      } catch {
-        this.logger.debug({ src }, 'Cache path not found, skipping');
-      }
-    }
-  }
-
-  /**
-   * Saves cached paths from clone to cache directory for future runs.
-   */
-  async saveCache(clonePath: string, aggregateId: string, cachePaths: string[]): Promise<void> {
-    const cacheDestDir = this.getCachePath(aggregateId);
-
-    for (const relativePath of cachePaths) {
-      const src = this.resolveSubPath(clonePath, relativePath);
-      const dest = this.resolveSubPath(cacheDestDir, relativePath);
-      if (!src || !dest) {
-        this.logger.warn({ relativePath }, 'Invalid cache path, skipping');
-        continue;
-      }
-
-      try {
-        await access(src);
-        await mkdir(dirname(dest), { recursive: true });
-        await cp(src, dest, { recursive: true });
-        this.logger.debug({ src, dest }, 'Cache saved');
-      } catch {
-        this.logger.debug({ src }, 'Cache source not found, skipping');
-      }
     }
   }
 }

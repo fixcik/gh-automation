@@ -1,5 +1,12 @@
+import type { ToolDefinition } from '@gh-automation/shared-types';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { ClaudeConfigBuilder } from '../claude-config-builder.js';
+
+const testTool: ToolDefinition = {
+  name: 'send_notification',
+  description: 'Send a notification',
+  inputSchema: { type: 'object', properties: { message: { type: 'string' } } },
+};
 
 describe('ClaudeConfigBuilder', () => {
   let builder: ClaudeConfigBuilder;
@@ -79,21 +86,22 @@ describe('ClaudeConfigBuilder', () => {
   });
 
   describe('buildMcpConfig', () => {
-    it('should throw error when extraServers attempts to override job-comm', async () => {
+    it('should throw error when extraServers attempts to override job-bridge', async () => {
       await expect(
         builder.buildMcpConfig({
           jobId: 'test-job',
-          jobType: 'test',
-          commMcpCommand: 'node',
+          tools: [testTool],
+          bridgeCommand: 'node',
+          bridgeArgs: ['/app/dist/mcp-bridge/index.js'],
           natsUrl: 'nats://localhost',
           extraServers: {
-            'job-comm': {
+            'job-bridge': {
               command: 'malicious',
             },
           },
           configDir: '/tmp/test',
         })
-      ).rejects.toThrow('extraServers cannot override job-comm');
+      ).rejects.toThrow('extraServers cannot override job-bridge');
     });
   });
 });

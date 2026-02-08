@@ -1,4 +1,4 @@
-import type { ClaudeJobRequest } from '@gh-automation/shared-types';
+import type { ClaudeJobRequest, ToolDefinition } from '@gh-automation/shared-types';
 import { JobType } from '@gh-automation/shared-types';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { JobExecutor } from '../job-executor.js';
@@ -16,8 +16,6 @@ const createMockLogger = () => ({
 const createMockCloneManager = () => ({
   clone: vi.fn().mockResolvedValue('/tmp/clone/job-test-1'),
   cleanup: vi.fn().mockResolvedValue(undefined),
-  restoreCache: vi.fn().mockResolvedValue(undefined),
-  saveCache: vi.fn().mockResolvedValue(undefined),
 });
 
 const createMockClaudeRunner = () => ({
@@ -38,6 +36,12 @@ const createMockPublisher = () => ({
   ensureStream: vi.fn().mockResolvedValue(undefined),
 });
 
+const testTool: ToolDefinition = {
+  name: 'send_notification',
+  description: 'Send a notification',
+  inputSchema: { type: 'object', properties: { message: { type: 'string' } } },
+};
+
 const createTestRequest = (overrides?: Partial<ClaudeJobRequest>): ClaudeJobRequest => ({
   jobId: 'test-job-1',
   jobType: JobType.PR_REVIEW,
@@ -51,10 +55,7 @@ const createTestRequest = (overrides?: Partial<ClaudeJobRequest>): ClaudeJobRequ
     maxTurns: 50,
     timeoutMs: 300_000,
   },
-  communication: {
-    enableNotifications: true,
-    enableAskUser: false,
-  },
+  tools: [testTool],
   metadata: {
     repository: 'owner/repo',
     prNumber: 42,
@@ -99,11 +100,11 @@ describe('JobExecutor', () => {
     // 2. Build args
     expect(mocks.configBuilder.buildArgs).toHaveBeenCalledWith(request.claude);
 
-    // 3. Build MCP config (enableNotifications = true)
+    // 3. Build MCP config (tools defined)
     expect(mocks.configBuilder.buildMcpConfig).toHaveBeenCalledWith(
       expect.objectContaining({
         jobId: 'test-job-1',
-        jobType: 'pr-review',
+        tools: [testTool],
       })
     );
 
@@ -131,14 +132,47 @@ describe('JobExecutor', () => {
     expect(result.jobId).toBe('test-job-1');
   });
 
-  it('should not build MCP config when communication is disabled', async () => {
-    const request = createTestRequest({
-      communication: { enableNotifications: false, enableAskUser: false },
-    });
+  it('should not build MCP config when tools is empty and no mcpServers', async () => {
+    const request = createTestRequest({ tools: [] });
 
     await executor.execute(request);
 
     expect(mocks.configBuilder.buildMcpConfig).not.toHaveBeenCalled();
+  });
+
+  it('should not build MCP config when tools is undefined and no mcpServers', async () => {
+    const request = createTestRequest({ tools: undefined });
+
+    await executor.execute(request);
+
+    expect(mocks.configBuilder.buildMcpConfig).not.toHaveBeenCalled();
+  });
+
+  it('should build MCP config when tools is empty but mcpServers is defined', async () => {
+    const request = createTestRequest({
+      tools: [],
+      claude: {
+        model: 'sonnet',
+        mcpServers: {
+          'custom-server': {
+            command: 'node',
+            args: ['/path/to/server.js'],
+          },
+        },
+      },
+    });
+
+    await executor.execute(request);
+
+    expect(mocks.configBuilder.buildMcpConfig).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jobId: 'test-job-1',
+        tools: [],
+        extraServers: expect.objectContaining({
+          'custom-server': expect.any(Object),
+        }),
+      })
+    );
   });
 
   it('should return failed result when Claude exits with non-zero code', async () => {
@@ -186,34 +220,6 @@ describe('JobExecutor', () => {
     await executor.execute(createTestRequest());
 
     expect(mocks.cloneManager.cleanup).toHaveBeenCalledWith('/tmp/clone/job-test-1');
-  });
-
-  it('should handle cache restore and save', async () => {
-    const request = createTestRequest({
-      cache: { paths: ['.pr-threads-cache'] },
-    });
-
-    await executor.execute(request);
-
-    expect(mocks.cloneManager.restoreCache).toHaveBeenCalledWith(
-      '/tmp/clone/job-test-1',
-      'owner/repo:42',
-      ['.pr-threads-cache']
-    );
-    expect(mocks.cloneManager.saveCache).toHaveBeenCalledWith(
-      '/tmp/clone/job-test-1',
-      'owner/repo:42',
-      ['.pr-threads-cache']
-    );
-  });
-
-  it('should skip cache when not specified', async () => {
-    const request = createTestRequest(); // no cache field
-
-    await executor.execute(request);
-
-    expect(mocks.cloneManager.restoreCache).not.toHaveBeenCalled();
-    expect(mocks.cloneManager.saveCache).not.toHaveBeenCalled();
   });
 
   it('should include timing in result', async () => {

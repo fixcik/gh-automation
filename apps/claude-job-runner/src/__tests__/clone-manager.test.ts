@@ -17,12 +17,30 @@ describe('CloneManager', () => {
 
   beforeEach(() => {
     logger = createMockLogger();
-    manager = new CloneManager('/tmp/clone', '/data/cache', logger as any);
+    manager = new CloneManager('/tmp/clone', logger as any);
   });
 
   describe('getClonePath', () => {
-    it('should build correct clone path from jobId', () => {
+    it('should build correct clone path from valid jobId', () => {
       expect(manager.getClonePath('abc-123')).toBe('/tmp/clone/job-abc-123');
+    });
+
+    it('should accept UUID format jobIds', () => {
+      expect(manager.getClonePath('550e8400-e29b-41d4-a716-446655440000')).toBe(
+        '/tmp/clone/job-550e8400-e29b-41d4-a716-446655440000'
+      );
+    });
+
+    it('should reject jobId with path traversal attempts', () => {
+      expect(() => manager.getClonePath('../etc/passwd')).toThrow('Invalid jobId format');
+      expect(() => manager.getClonePath('../../root')).toThrow('Invalid jobId format');
+      expect(() => manager.getClonePath('job/../etc')).toThrow('Invalid jobId format');
+    });
+
+    it('should reject jobId with special characters', () => {
+      expect(() => manager.getClonePath('job@123')).toThrow('Invalid jobId format');
+      expect(() => manager.getClonePath('job$test')).toThrow('Invalid jobId format');
+      expect(() => manager.getClonePath('job/123')).toThrow('Invalid jobId format');
     });
   });
 
@@ -85,16 +103,6 @@ describe('CloneManager', () => {
         'https://github.com/owner/repo.git',
         '/tmp/clone/job-1',
       ]);
-    });
-  });
-
-  describe('getCachePath', () => {
-    it('should sanitize aggregateId for filesystem path', () => {
-      expect(manager.getCachePath('owner/repo:42')).toBe('/data/cache/owner_repo_42');
-    });
-
-    it('should handle aggregateId without special chars', () => {
-      expect(manager.getCachePath('simple-key')).toBe('/data/cache/simple-key');
     });
   });
 });

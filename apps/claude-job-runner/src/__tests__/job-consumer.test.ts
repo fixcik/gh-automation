@@ -63,7 +63,6 @@ describe('JobConsumer', () => {
           prompt: 'Review this PR',
           repository: { url: 'https://github.com/owner/repo.git' },
           claude: {},
-          communication: { enableNotifications: true, enableAskUser: false },
           metadata: {},
           createdAt: '2026-01-01T00:00:00Z',
         },

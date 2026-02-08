@@ -1,4 +1,5 @@
 import type { JobType } from './job-type.enum.js';
+import type { ToolDefinition } from './tool-definition.js';
 
 export interface McpServerConfig {
   command: string;
@@ -24,14 +25,7 @@ export interface ClaudeJobRequest {
     permissionMode?: string;
     mcpServers?: Record<string, McpServerConfig>;
   };
-  communication: {
-    enableNotifications: boolean;
-    enableAskUser: boolean;
-    askUserTimeoutMs?: number;
-  };
-  cache?: {
-    paths: string[];
-  };
+  tools?: ToolDefinition[];
   metadata: Record<string, unknown>;
   createdAt: string;
 }
