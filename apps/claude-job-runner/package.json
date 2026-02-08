@@ -20,7 +20,8 @@
     "@gh-automation/shared-types": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.26.0",
     "@nats-io/transport-node": "^3.0.0",
-    "execa": "^9.5.2"
+    "execa": "^9.5.2",
+    "zod": "^4.0.0"
   },
   "devDependencies": {
     "@gh-automation/typescript-config": "workspace:*",
