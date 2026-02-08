@@ -292,7 +292,7 @@ git worktree prune
 
 ### Pre-commit Hook (Code Formatting)
 
-При `pnpm install` автоматически устанавливается pre-commit хук через `simple-git-hooks`, который запускает `nano-staged` для проверки форматирования кода перед коммитом.
+Running `pnpm install` automatically installs a pre-commit hook via `simple-git-hooks` that runs `nano-staged` to check code formatting before each commit.
 
 **Manual installation (if needed):**
 ```bash
