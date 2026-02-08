@@ -214,22 +214,73 @@ See `.env.example` for complete list.
 
 ### Before Starting Any Feature/Fix
 
-**MANDATORY:** Create isolated worktree using `/using-git-worktrees` skill:
+**MANDATORY:** Create isolated worktree.
 
+**Option 1: Using Claude Code skill (recommended)**
 ```bash
-# DON'T start working in main directory!
-# First create worktree:
+/using-git-worktrees <branch-name>
+```
+Claude Code automatically handles:
+- Worktree creation in `.worktrees/<branch-name>/`
+- Branch creation
+- Dependencies installation (`pnpm install`)
+- Project build (`pnpm build`)
+
+**Option 2: Manual setup**
+```bash
 git worktree add .worktrees/<branch-name> -b <branch-name>
 cd .worktrees/<branch-name>
-pnpm install && pnpm build
+pnpm install
+pnpm build
 ```
 
 ### Workflow
 
-1. **Create worktree:** `/using-git-worktrees <branch-name>` skill handles setup automatically
+1. **Create worktree:** Use skill or manual commands above
 2. **Work in worktree:** All code changes, commits, tests happen in `.worktrees/<branch-name>/`
 3. **Shared infrastructure:** `docker-compose` runs from main directory (shared DB, NATS, etc.)
 4. **Clean main branch:** Main directory stays on `master`, always clean for emergency fixes
+
+### Worktree Lifecycle Management
+
+**List existing worktrees:**
+```bash
+git worktree list
+```
+
+**After PR is merged:**
+```bash
+# Return to main directory
+cd ../../  # from .worktrees/<branch-name> to repo root
+
+# Remove worktree
+git worktree remove .worktrees/<branch-name>
+
+# Delete merged branch
+git branch -d <branch-name>
+```
+
+**If you accidentally started work in master:**
+```bash
+# Stash your changes
+git stash
+
+# Create worktree
+git worktree add .worktrees/<branch-name> -b <branch-name>
+cd .worktrees/<branch-name>
+
+# Apply stashed changes
+git stash pop
+```
+
+**Clean up stale worktrees:**
+```bash
+# List worktrees with status
+git worktree list
+
+# Prune references to deleted worktrees
+git worktree prune
+```
 
 ### Why Worktrees?
 
@@ -237,6 +288,18 @@ pnpm install && pnpm build
 - ✅ Multiple features in parallel without branch switching
 - ✅ Clean rollback: delete worktree directory
 - ✅ Shared infrastructure (one docker-compose for all worktrees)
+- ✅ No accidental master commits (enforced by workflow)
+
+### Pre-commit Hook (Code Formatting)
+
+При `pnpm install` автоматически устанавливается pre-commit хук через `simple-git-hooks`, который запускает `nano-staged` для проверки форматирования кода перед коммитом.
+
+**Manual installation (if needed):**
+```bash
+pnpm prepare  # runs simple-git-hooks
+```
+
+**Note:** Project uses `simple-git-hooks`, not husky. Some older docs may reference husky.
 
 ## Common Gotchas
 
