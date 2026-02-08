@@ -210,13 +210,96 @@ See `.env.example` for complete list.
 
 ## Git Worktrees
 
-**Use `/using-git-worktrees` skill for guided setup.**
+**⚠️ CRITICAL: Always use worktrees for new features/fixes. NEVER work directly in master branch.**
 
-New features/fixes require isolated worktree in `.worktrees/`:
-- **Create:** `git worktree add .worktrees/<branch-name> -b <branch-name>`
-- **Initialize:** `cd .worktrees/<branch-name> && pnpm install && pnpm build`
-- **Infrastructure:** Run `docker-compose up -d` from main directory (shared across worktrees)
-- **Development:** Execute all scripts (dev, test, build) from worktree directory
+### Before Starting Any Feature/Fix
+
+**MANDATORY:** Create isolated worktree.
+
+**Option 1: Using Claude Code skill (recommended)**
+```bash
+/using-git-worktrees <branch-name>
+```
+Claude Code automatically handles:
+- Worktree creation in `.worktrees/<branch-name>/`
+- Branch creation
+- Dependencies installation (`pnpm install`)
+- Project build (`pnpm build`)
+
+**Option 2: Manual setup**
+```bash
+git worktree add .worktrees/<branch-name> -b <branch-name>
+cd .worktrees/<branch-name>
+pnpm install
+pnpm build
+```
+
+### Workflow
+
+1. **Create worktree:** Use skill or manual commands above
+2. **Work in worktree:** All code changes, commits, tests happen in `.worktrees/<branch-name>/`
+3. **Shared infrastructure:** `docker-compose` runs from main directory (shared DB, NATS, etc.)
+4. **Clean main branch:** Main directory stays on `master`, always clean for emergency fixes
+
+### Worktree Lifecycle Management
+
+**List existing worktrees:**
+```bash
+git worktree list
+```
+
+**After PR is merged:**
+```bash
+# Return to main directory
+cd ../../  # from .worktrees/<branch-name> to repo root
+
+# Remove worktree
+git worktree remove .worktrees/<branch-name>
+
+# Delete merged branch
+git branch -d <branch-name>
+```
+
+**If you accidentally started work in master:**
+```bash
+# Stash your changes
+git stash
+
+# Create worktree
+git worktree add .worktrees/<branch-name> -b <branch-name>
+cd .worktrees/<branch-name>
+
+# Apply stashed changes
+git stash pop
+```
+
+**Clean up stale worktrees:**
+```bash
+# List worktrees with status
+git worktree list
+
+# Prune references to deleted worktrees
+git worktree prune
+```
+
+### Why Worktrees?
+
+- ✅ Isolates work-in-progress from stable master
+- ✅ Multiple features in parallel without branch switching
+- ✅ Clean rollback: delete worktree directory
+- ✅ Shared infrastructure (one docker-compose for all worktrees)
+- ✅ No accidental master commits (enforced by workflow)
+
+### Pre-commit Hook (Code Formatting)
+
+Running `pnpm install` automatically installs a pre-commit hook via `simple-git-hooks` that runs `nano-staged` to check code formatting before each commit.
+
+**Manual installation (if needed):**
+```bash
+pnpm prepare  # runs simple-git-hooks
+```
+
+**Note:** Project uses `simple-git-hooks`, not husky. Some older docs may reference husky.
 
 ## Common Gotchas
 
